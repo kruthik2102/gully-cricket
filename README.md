@@ -52,7 +52,7 @@ cd android && gradle assembleRelease   # Gradle 8.10, JDK 17, Android SDK 35
 
 Or open the `android/` folder in Android Studio.
 
-Pushing a tag such as `v1.0.1` runs the **Build Android APK** workflow, which builds the APK and attaches it to a GitHub release. Release builds are signed with the key stored in the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the workflow signs with a debug key and marks the release as a pre-release.
+Every push to `main` runs the **Build Android APK** workflow. When `version.txt` holds a version that has no release yet, the workflow publishes the APK as release `v<version>`; pushing a tag such as `v1.0.1` does the same. Release builds are signed with the key stored in the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without them the workflow signs with a debug key and marks the release as a pre-release.
 
 ## Project layout
 
