@@ -69,7 +69,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: gradle assembleRelease --no-daemon -PversionName="${{ steps.ver.outputs.name }}" -PversionCode="${GITHUB_RUN_NUMBER}"
+        run: |
+          set +e
+          gradle assembleRelease --no-daemon --stacktrace -PversionName="${{ steps.ver.outputs.name }}" -PversionCode="${GITHUB_RUN_NUMBER}" > gradle.log 2>&1
+          code=$?
+          tail -n 60 gradle.log
+          if [ $code -ne 0 ]; then
+            # Surface the cause as an annotation so it is visible without opening the full log.
+            msg=$( (grep -n -A 25 "What went wrong" gradle.log; grep -n -E "error:|ERROR:|e: " gradle.log | head -n 20) | head -n 60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Gradle build failed::$msg"
+          fi
+          exit $code
 
       - name: Name the APK
         run: cp android/app/build/outputs/apk/release/app-release.apk "GullyCricket-${{ steps.ver.outputs.name }}.apk"
