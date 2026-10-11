@@ -53,10 +53,26 @@ jobs:
       - name: Load the signing key
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            # Pasted secrets often pick up spaces or line breaks: strip all whitespace before decoding.
+            if ! printf '%s' "$KEYSTORE_B64" | tr -d '[:space:]' | base64 --decode > "$RUNNER_TEMP/release.jks" 2>/dev/null; then
+              echo "::error title=Signing key::ANDROID_KEYSTORE_BASE64 is not valid base64. Paste the whole content of keystore.base64.txt again."
+              exit 1
+            fi
+            PASS="$(printf '%s' "$KS_PASS" | tr -d '[:space:]')"
+            ALIAS="$(printf '%s' "$KS_ALIAS" | tr -d '[:space:]')"
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1; then
+              echo "::error title=Signing key::The keystore did not open with ANDROID_KEYSTORE_PASSWORD and alias '$ALIAS'. Check those two secrets."
+              exit 1
+            fi
+            echo "::add-mask::$PASS"
             echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=$PASS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=$ALIAS" >> "$GITHUB_ENV"
             echo "SIGNING=release" >> "$GITHUB_ENV"
           else
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret, so this APK is signed with the debug key."
@@ -65,10 +81,6 @@ jobs:
 
       - name: Build the APK
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set +e
           gradle assembleRelease --no-daemon --stacktrace -PversionName="${{ steps.ver.outputs.name }}" -PversionCode="${GITHUB_RUN_NUMBER}" > gradle.log 2>&1
