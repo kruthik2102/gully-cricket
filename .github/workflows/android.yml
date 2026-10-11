@@ -64,8 +64,14 @@ jobs:
             fi
             PASS="$(printf '%s' "$KS_PASS" | tr -d '[:space:]')"
             ALIAS="$(printf '%s' "$KS_ALIAS" | tr -d '[:space:]')"
+            SIZE=$(wc -c < "$RUNNER_TEMP/release.jks"); SUM=$(sha256sum "$RUNNER_TEMP/release.jks" | cut -c1-12)
+            if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" >/dev/null 2>"$RUNNER_TEMP/kt.err"; then
+              WHY=$(grep -m1 -i "exception\|error" "$RUNNER_TEMP/kt.err" | sed 's/[^A-Za-z0-9 .:_-]//g' | cut -c1-160)
+              echo "::error title=Signing key::Keystore did not open. file bytes=$SIZE sha=$SUM password chars=${#PASS} ($WHY)"
+              exit 1
+            fi
             if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1; then
-              echo "::error title=Signing key::The keystore did not open with ANDROID_KEYSTORE_PASSWORD and alias '$ALIAS'. Check those two secrets."
+              echo "::error title=Signing key::Keystore opened, but alias not found. alias chars=${#ALIAS}. ANDROID_KEY_ALIAS should be: gully"
               exit 1
             fi
             echo "::add-mask::$PASS"
