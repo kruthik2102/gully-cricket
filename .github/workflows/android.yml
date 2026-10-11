@@ -70,9 +70,16 @@ jobs:
               echo "::error title=Signing key::Keystore did not open. file bytes=$SIZE sha=$SUM password chars=${#PASS} ($WHY)"
               exit 1
             fi
+            # The alias is not secret: if the secret doesn't name a key in the keystore, use the keystore's only key.
             if ! keytool -list -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" -alias "$ALIAS" >/dev/null 2>&1; then
-              echo "::error title=Signing key::Keystore opened, but alias not found. alias chars=${#ALIAS}. ANDROID_KEY_ALIAS should be: gully"
-              exit 1
+              ALIASES=$(keytool -list -v -keystore "$RUNNER_TEMP/release.jks" -storepass "$PASS" 2>/dev/null | sed -n 's/^Alias name: //p')
+              if [ "$(printf '%s\n' "$ALIASES" | grep -c .)" = "1" ]; then
+                ALIAS="$ALIASES"
+                echo "::warning title=Signing key::ANDROID_KEY_ALIAS did not match; using the keystore's only key alias ($ALIAS)."
+              else
+                echo "::error title=Signing key::Keystore opened, but ANDROID_KEY_ALIAS does not match any key. It should be: gully"
+                exit 1
+              fi
             fi
             echo "::add-mask::$PASS"
             echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
