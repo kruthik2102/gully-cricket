@@ -88,7 +88,13 @@ function installMock() {
   check((await mode()) === 'cloud', 'store switches to cloud mode with db + user');
 
   console.log('Writes');
-  await act('newMatch'); await act('toRules');
+  check((await page.textContent('#app')).includes('Who plays usually?'), 'first launch asks for regular players');
+  await page.fill('#regAdd', 'Kiran, Rahul, Manju, Arjun, Pradeep, Vinay, Ravi, Darshan');
+  await page.press('#regAdd', 'Enter');
+  await act('regDone');
+  await act('newMatch');
+  await act('randOpen'); await act('randAll'); await act('randMake');
+  await act('toRules');
   await act('setNum', '[data-k="overs"][data-v="2"]'); await act('oversStep', '[data-v="-1"]');
   await act('toToss');
   await act('call', '[data-v="H"]'); await act('caller', '[data-v="A"]'); await act('realCoin'); await act('landed', '[data-v="H"]');
@@ -132,6 +138,7 @@ function installMock() {
   check(m2 && m2.status === 'done' && m2.result && m2.result.type, 'finished match + result summary synced');
   const meta = remote['data/users/u_mock42/gully'];
   check(meta && meta.live === null && meta.teams.length === 2, 'meta synced (no live match, 2 saved teams)');
+  check(meta && meta.onboarded === true && Array.isArray(meta.regulars) && meta.regulars.length === 8, 'regular players synced to the cloud');
 
   console.log('Delete');
   await act('backToResult');

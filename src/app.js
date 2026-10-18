@@ -9,6 +9,14 @@
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = (p) => (p || '') + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const clone = (o) => JSON.parse(JSON.stringify(o));
+  const cleanName = (s) => String(s == null ? '' : s).trim().replace(/\s+/g, ' ').slice(0, 24);
+  const norm = (s) => cleanName(s).toLowerCase();
+  function randInt(n) {
+    try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; } catch (e) { return Math.floor(Math.random() * n); }
+  }
+  function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = randInt(i + 1); const x = arr[i]; arr[i] = arr[j]; arr[j] = x; } return arr; }
+  const pad2 = (n) => (n < 10 ? '0' : '') + n;
+  function dayKey(ts) { const d = new Date(ts); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   // The Android app shell (WebView) exposes GullyNative for save / share / copy. It is absent in the browser artifact.
   const NATIVE = window.GullyNative && typeof window.GullyNative.saveFile === 'function' ? window.GullyNative : null;
   const safeColor = (c) => (/^#[0-9a-f]{6}$/i.test(String(c)) ? c : '#8A93A6');
@@ -80,12 +88,43 @@
     check: ic('<path d="M20 6L9 17l-5-5"/>'),
     bat: ic('<path d="M14.5 3.5l6 6-9.2 9.2a2 2 0 0 1-2.8 0l-3.2-3.2a2 2 0 0 1 0-2.8z"/><path d="M6.5 17.5L3 21"/>'),
     ball: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="var(--ball)"/><path d="M5 6.5a9 9 0 0 1 0 11M19 6.5a9 9 0 0 0 0 11" fill="none" stroke="#fff" stroke-width="1.6"/></svg>',
-    coin: ic('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/>')
+    coin: ic('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/>'),
+    list: ic('<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><path d="M4 18l1 1 2-2"/>'),
+    dice: ic('<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/>'),
+    shuffle: ic('<path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>'),
+    chg: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M8 21H3v-5"/><path d="M3 21l7-7"/></svg>',
+  };
+  ICON.tab_home = ic('<path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/>');
+  ICON.tab_board = ICON.trophy;
+  ICON.tab_history = ic('<rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/>');
+  const AS = window.GullyAssets || {};
+  try { const cs = document.createElement('style'); cs.textContent = '.cap-o{background-image:url(' + AS.capO + ')}.cap-p{background-image:url(' + AS.capP + ')}'; document.head.appendChild(cs); } catch (e) { /* no head */ }
+  const capImg = (k) => '<i class="cap-img cap-' + k + '" aria-hidden="true"></i>';
+  const COIN_EMB = {
+    H: '<svg class="emb" viewBox="0 0 64 64" aria-hidden="true"><g transform="rotate(-36 30 32)"><rect x="23" y="21" width="14" height="35" rx="5"/><rect x="27.5" y="5" width="5" height="18" rx="2.5"/></g><circle cx="48.5" cy="46.5" r="7.5"/><path d="M43.6 41.8a7.5 7.5 0 0 1 0 9.4M53.4 41.8a7.5 7.5 0 0 0 0 9.4" fill="none" class="seam"/></svg>',
+    T: '<svg class="emb" viewBox="0 0 64 64" aria-hidden="true"><rect x="17" y="12" width="14" height="4" rx="2"/><rect x="33" y="12" width="14" height="4" rx="2"/><rect x="17.5" y="18" width="5.5" height="38" rx="2.4"/><rect x="29.25" y="18" width="5.5" height="38" rx="2.4"/><rect x="41" y="18" width="5.5" height="38" rx="2.4"/></svg>'
   };
 
   /* ---------- data ---------- */
-  function emptyData() { return { v: 1, teams: [], live: null, counter: 0, last: null, pairCfg: {}, savedAt: 0, matches: [] }; }
+  function emptyData() { return { v: 1, teams: [], regulars: [], onboarded: false, live: null, counter: 0, last: null, pairCfg: {}, savedAt: 0, matches: [] }; }
   function validMatch(m) { return !!(m && typeof m.id === 'string' && m.teams && m.teams.A && m.teams.B && Array.isArray(m.teams.A.players) && Array.isArray(m.teams.B.players) && Array.isArray(m.events) && m.toss); }
+  /* Regular players: the people who usually play. Teams are picked from this list; a regular's id is reused as the player id. */
+  function regularsFromTeams(teams) {
+    const out = [];
+    (Array.isArray(teams) ? teams : []).forEach((tm) => (tm && Array.isArray(tm.players) ? tm.players : []).forEach((p) => {
+      const name = cleanName(p && p.name);
+      if (name && !out.some((r) => norm(r.name) === norm(name))) out.push({ id: String(p.id || uid('p')), name });
+    }));
+    return out;
+  }
+  function unionRegulars(a, b) {
+    const out = (Array.isArray(a) ? a : []).slice();
+    (Array.isArray(b) ? b : []).forEach((r) => {
+      const name = cleanName(r && r.name);
+      if (name && !out.some((x) => norm(x.name) === norm(name))) out.push({ id: String((r && r.id) || uid('p')), name });
+    });
+    return out;
+  }
   function loadLocal() {
     const meta = lsGet(META_KEY) || {};
     const d = emptyData();
@@ -95,10 +134,33 @@
     (Array.isArray(meta.ids) ? meta.ids : []).forEach((id) => { const m = lsGet(MATCH_KEY + id); if (validMatch(m)) d.matches.push(m); });
     d.matches.sort((a, b) => a.createdAt - b.createdAt);
     if (d.live && !d.matches.some((m) => m.id === d.live && m.status === 'live')) d.live = null;
+    // Older versions had no regulars list: build it from the saved teams so nobody retypes names.
+    d.regulars = Array.isArray(meta.regulars) ? unionRegulars([], meta.regulars) : regularsFromTeams(d.teams);
+    d.onboarded = !!meta.onboarded || d.teams.length > 0 || d.matches.length > 0;
     return d;
   }
   let D = loadLocal();
-  function metaDoc() { return { v: 1, teams: D.teams, live: D.live, counter: D.counter, last: D.last, pairCfg: D.pairCfg, savedAt: D.savedAt }; }
+  function metaDoc() { return { v: 1, teams: D.teams, regulars: D.regulars, onboarded: !!D.onboarded, live: D.live, counter: D.counter, last: D.last, pairCfg: D.pairCfg, savedAt: D.savedAt }; }
+  const findRegular = (name) => D.regulars.find((r) => norm(r.name) === norm(name)) || null;
+  // "chethan" is saved as "Chethan"; names in other scripts are left as typed.
+  const nameCase = (n) => n.replace(/(^|[\s.'-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  function addRegular(name) {
+    const n = nameCase(cleanName(name));
+    if (!n) return null;
+    let r = findRegular(n);
+    if (!r) { r = { id: uid('p'), name: n }; D.regulars.push(r); }
+    return r;
+  }
+  /* Most-played first (from match history), then the order they were added. */
+  function sortedRegulars() {
+    const cnt = new Map();
+    D.matches.forEach((m) => {
+      const names = m.teams.A.players.concat(m.teams.B.players).map((p) => p.name);
+      if (m.joker) names.push(m.joker.name);
+      names.forEach((n) => { const k = norm(n); cnt.set(k, (cnt.get(k) || 0) + 1); });
+    });
+    return D.regulars.map((r, i) => ({ r, i, n: cnt.get(norm(r.name)) || 0 })).sort((a, b) => b.n - a.n || a.i - b.i).map((x) => x.r);
+  }
   const findMatch = (id) => D.matches.find((m) => m.id === id) || null;
   const liveMatch = () => (D.live ? findMatch(D.live) : null);
   const teamById = (id) => D.teams.find((x) => x.id === id) || null;
@@ -202,6 +264,8 @@
       const tm = new Map(D.teams.map((x) => [x.id, x]));
       (Array.isArray(meta.teams) ? meta.teams : []).forEach((rt) => { const lt = tm.get(rt.id); if (!lt || (rt.updatedAt || 0) >= (lt.updatedAt || 0)) tm.set(rt.id, rt); });
       D.teams = Array.from(tm.values());
+      D.regulars = unionRegulars(D.regulars, Array.isArray(meta.regulars) ? meta.regulars : regularsFromTeams(meta.teams));
+      D.onboarded = !!D.onboarded || !!meta.onboarded || (Array.isArray(meta.teams) && meta.teams.length > 0);
       if ((meta.savedAt || 0) > (D.savedAt || 0)) {
         D.last = meta.last || D.last; D.live = meta.live || null; D.savedAt = meta.savedAt;
         D.pairCfg = Object.assign({}, D.pairCfg, meta.pairCfg || {});
@@ -210,6 +274,7 @@
       }
     }
     D.counter = Math.max(D.counter || 0, (meta && +meta.counter) || 0, ...D.matches.map((m) => +m.no || 0));
+    if (D.matches.length) D.onboarded = true;
     if (D.live && !D.matches.some((m) => m.id === D.live && m.status === 'live')) D.live = null;
     if (!D.live) { const lv = D.matches.filter((m) => m.status === 'live'); if (lv.length) D.live = lv[lv.length - 1].id; }
     return push;
@@ -246,7 +311,7 @@
     S.sheet = null;
     if (r.state.result) {
       m.status = 'done'; m.result = summarize(m, r.state); m.finishedAt = Date.now();
-      D.live = null; S.viewId = m.id; S.cardTab = 0;
+      D.live = null; S.viewId = m.id; S.cardTab = 0; S.resultFrom = 'live'; S.celebrate = m.id;
       Store.touchMatch(m); Store.touchMeta();
       haptic(40);
       go('result');
@@ -315,18 +380,16 @@
 
   /* ---------- UI state ---------- */
   const noMods = () => ({ wide: false, nb: false, bye: false, lb: false });
-  const S = { screen: 'home', draft: null, mod: noMods(), sheet: null, openers: {}, viewId: null, cardTab: 0, teamErr: [], poster: null, toastT: 0, enterT: 0 };
+  const S = { screen: 'home', draft: null, mod: noMods(), sheet: null, openers: {}, viewId: null, cardTab: 0, teamErr: [], poster: null, toastT: 0, enterT: 0, fx: null, regMode: 'edit', regBack: 'home' };
   const emptyToss = () => ({ caller: null, call: null, real: false, result: null, winner: null, choice: null, flipping: false });
-  function mkTeam(name, color, names) { return { id: uid('t'), name, color, players: names.map((n) => ({ id: uid('p'), name: n })) }; }
-  function newDraft(blank) {
-    const example = !blank && !D.teams.length;
+  function mkTeam(name, color) { return { id: uid('t'), name, color, players: [] }; }
+  // Wides and no-balls are always bowled again (the toggles are gone); older matches keep whatever they were played with.
+  function cfgBase(extra) { return Object.assign(clone(E.PRESETS.gully), { houseRules: [] }, extra || {}, { wideRebowl: true, nbRebowl: true }); }
+  function newDraft() {
     return {
-      example,
-      A: example ? mkTeam('Basavanagudi Bulls', COLORS[0].c, ['Kiran', 'Rahul', 'Manju', 'Arjun', 'Pradeep']) : mkTeam('', COLORS[0].c, []),
-      B: example ? mkTeam('Malleshwaram Mavericks', COLORS[1].c, ['Vinay', 'Ravi', 'Darshan', 'Naveen', 'Chethan']) : mkTeam('', COLORS[1].c, []),
-      joker: { on: false, id: uid('j'), name: '', bowls: true },
-      config: Object.assign(clone(E.PRESETS.gully), { houseRules: [] }),
-      toss: emptyToss()
+      A: mkTeam(t('team1'), COLORS[0].c), B: mkTeam(t('team2'), COLORS[1].c),
+      joker: { on: false, id: uid('j'), name: '', bowls: true }, autoJoker: false, rand: null,
+      config: cfgBase(), toss: emptyToss()
     };
   }
   function teamCopy(tm) { return { id: tm.id, name: tm.name, color: safeColor(tm.color), players: tm.players.map((p) => ({ id: p.id, name: p.name })) }; }
@@ -334,9 +397,9 @@
     const A = teamById(m.teams.A.id) || m.teams.A, B = teamById(m.teams.B.id) || m.teams.B;
     const cfg = Object.assign({}, D.pairCfg[pairKey(A.id, B.id)] || m.config);
     return {
-      example: false, A: teamCopy(A), B: teamCopy(B),
+      A: teamCopy(A), B: teamCopy(B), autoJoker: false, rand: null,
       joker: m.joker ? { on: true, id: m.joker.id, name: m.joker.name, bowls: cfg.jokerBowls !== false } : { on: false, id: uid('j'), name: '', bowls: true },
-      config: Object.assign(clone(E.PRESETS.gully), { houseRules: [] }, cfg), toss: emptyToss()
+      config: cfgBase(cfg), toss: emptyToss()
     };
   }
   function draftFromLast() {
@@ -344,9 +407,9 @@
     const cfg = D.pairCfg[pairKey(A.id, B.id)] || {};
     const j = D.last.joker || {};
     return {
-      example: false, A: teamCopy(A), B: teamCopy(B),
+      A: teamCopy(A), B: teamCopy(B), autoJoker: false, rand: null,
       joker: { on: !!j.on, id: j.id || uid('j'), name: j.name || '', bowls: j.bowls !== false },
-      config: Object.assign(clone(E.PRESETS.gully), { houseRules: [] }, cfg), toss: emptyToss()
+      config: cfgBase(cfg), toss: emptyToss()
     };
   }
 
@@ -364,15 +427,24 @@
     if (!out) out = ['', ''];
     const same = lastScreen === S.screen;
     const y = window.scrollY;
-    app.innerHTML = out[0];
+    const barHtml = out[1] ? '<div class="dock">' + out[1] + '</div>' : '';
+    if (same) { patch(app, out[0]); patch($('#bar'), barHtml); } else { app.innerHTML = out[0]; $('#bar').innerHTML = barHtml; }
     app.classList.toggle('has-bar', !!out[1]);
-    $('#bar').innerHTML = out[1] ? '<div class="dock">' + out[1] + '</div>' : '';
-    if (!same && !reducedMotion()) {
-      app.classList.add('enter');
+    app.classList.toggle('has-tabs', TABS.indexOf(S.screen) >= 0);
+    if (!same) {
+      // Screens slide in from the side they logically come from: tabs left/right, deeper screens from the right.
+      const a = TABS.indexOf(lastScreen), b = TABS.indexOf(S.screen);
+      const dir = a >= 0 && b >= 0 ? (b > a ? 'right' : 'left') : (DEPTH[S.screen] || 0) >= (DEPTH[lastScreen] || 0) ? 'fwd' : 'back';
+      app.classList.remove('enter', 'dir-right', 'dir-left', 'dir-fwd', 'dir-back');
+      void app.offsetWidth;
+      app.classList.add('enter', 'dir-' + dir);
+      $('#bar').classList.add('enter-bar');
       clearTimeout(S.enterT);
-      S.enterT = setTimeout(() => app.classList.remove('enter'), 520);
+      S.enterT = setTimeout(() => { app.classList.remove('enter'); $('#bar').classList.remove('enter-bar'); }, 700);
     }
+    renderTabs();
     renderSheet();
+    Coin3D.mountAll();
     if (same && !opts.top) window.scrollTo(0, y); else window.scrollTo(0, 0);
     lastScreen = S.screen;
     if (opts.focus) { const el = document.getElementById(opts.focus); if (el) el.focus({ preventScroll: true }); }
@@ -385,19 +457,29 @@
   }
   function renderSheet() {
     const root = $('#sheet');
-    let html = '';
+    let html = '', key = '';
     if (S.screen === 'match' && !(S.sheet && S.sheet.type === 'confirm')) {
       const m = liveMatch(), st = stateOf(m);
       const p = st && st.pending && st.pending.type;
-      if (p === 'batter') html = shNextBatter(m, st);
-      else if (p === 'bowler') html = shNextBowler(m, st);
+      if (p === 'batter') { html = shNextBatter(m, st); key = 'p-batter'; }
+      else if (p === 'bowler') { html = shNextBowler(m, st); key = 'p-bowler'; }
     }
-    if (!html && S.sheet && SHEETS[S.sheet.type]) html = SHEETS[S.sheet.type]();
+    if (!html && S.sheet && SHEETS[S.sheet.type]) { html = SHEETS[S.sheet.type](); key = S.sheet.type + (S.sheet.side || ''); }
     const wasOpen = !root.hidden;
-    root.innerHTML = html;
+    // Re-rendering the same sheet (e.g. ticking names): keep its scroll position and skip the slide-in.
+    const prev = root.querySelector('.sheet');
+    const same = wasOpen && html && prev && root.dataset.k === key;
+    const top = same ? prev.scrollTop : 0;
+    if (same) patch(root, html); else root.innerHTML = html;
     root.hidden = !html;
+    root.dataset.k = html ? key : '';
+    root.classList.toggle('still', !!same);
+    if (same) { const sh = root.querySelector('.sheet'); if (sh) { sh.classList.add('still'); sh.scrollTop = top; } }
+    if (wasOpen && prev && !same) ghostOut(prev, root.querySelector('.scrim'));
     const bar = $('#bar');
     bar.hidden = !!html || !bar.innerHTML;
+    const tabs = $('#tabs');
+    if (tabs) tabs.hidden = !!html || TABS.indexOf(S.screen) < 0;
     document.body.style.overflow = html ? 'hidden' : '';
     if (html && !wasOpen) {
       const f = root.querySelector('.sheet [data-autofocus]') || root.querySelector('.sheet button:not([disabled])');
@@ -405,6 +487,72 @@
     }
   }
   function go(screen) { S.screen = screen; S.sheet = null; render({ top: true }); }
+  /* A closing sheet leaves as a non-interactive copy that slides back down, so the real one is gone at once. */
+  function ghostOut(sheet, nextScrim) {
+    if (reducedMotion() || !sheet.animate) return;
+    const g = document.createElement('div');
+    g.className = 'ghost';
+    g.setAttribute('aria-hidden', 'true');
+    const sc = document.createElement('div');
+    sc.className = 'scrim';
+    const cp = sheet.cloneNode(true);
+    cp.classList.add('still');
+    if (!nextScrim) g.appendChild(sc);
+    g.appendChild(cp);
+    document.body.appendChild(g);
+    const from = getComputedStyle(sheet).transform;
+    cp.animate([{ transform: from === 'none' ? 'translateY(0)' : from }, { transform: 'translateY(100%)' }], { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)', fill: 'forwards' });
+    sc.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'forwards' });
+    setTimeout(() => g.remove(), 240);
+  }
+  /* Morph `root`'s children into `html`: keep matching nodes, update attributes and text, replace what differs.
+     Kept nodes let CSS transitions run (switches slide, the segmented thumb glides, ticks and colours fade).
+     data-re="…" marks an element that must be rebuilt when its value changes, so its keyframe plays again;
+     data-keep leaves an element's children alone (the 3D coin canvas lives there). */
+  function patch(root, html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    morph(root, tpl.content);
+  }
+  function morph(from, to) {
+    const a = from.childNodes, b = to.childNodes;
+    for (let i = 0; i < b.length; i++) {
+      const nb = b[i], na = a[i];
+      if (!na) { from.appendChild(nb.cloneNode(true)); continue; }
+      if (na.nodeType !== nb.nodeType || na.nodeName !== nb.nodeName || (nb.nodeType === 1 && (nb.getAttribute('data-re') !== na.getAttribute('data-re') || nb.id !== na.id))) { from.replaceChild(nb.cloneNode(true), na); continue; }
+      if (nb.nodeType !== 1) { if (na.nodeValue !== nb.nodeValue) na.nodeValue = nb.nodeValue; continue; }
+      syncAttrs(na, nb);
+      if (na.hasAttribute('data-keep')) continue;
+      if (na.tagName === 'TEXTAREA') { if (na !== document.activeElement) na.value = nb.value; continue; }
+      morph(na, nb);
+    }
+    while (a.length > b.length) from.removeChild(from.lastChild);
+  }
+  function syncAttrs(x, y) {
+    Array.from(x.attributes).forEach((at) => { if (!y.hasAttribute(at.name)) x.removeAttribute(at.name); });
+    Array.from(y.attributes).forEach((at) => { if (x.getAttribute(at.name) !== at.value) x.setAttribute(at.name, at.value); });
+    if (x.tagName === 'INPUT' && x.type !== 'file' && x !== document.activeElement) { const v = y.getAttribute('value') || ''; if (x.value !== v) x.value = v; }
+  }
+  /* Bottom tab bar for the three top-level screens; built once so its highlight can glide between tabs. */
+  const TABS = ['home', 'board', 'history'];
+  const DEPTH = { home: 0, board: 0, history: 0, regulars: 1, teams: 1, rules: 2, toss: 3, match: 4, result: 5, poster: 6 };
+  function renderTabs() {
+    const el = $('#tabs');
+    if (!el) return;
+    const i = TABS.indexOf(S.screen);
+    if (el.dataset.lang !== prefs.lang) {
+      el.dataset.lang = prefs.lang;
+      const lab = { home: t('tabHome'), board: t('tabBoard'), history: t('tabMatches') };
+      el.innerHTML = '<div class="tabbar"><span class="tab-thumb" aria-hidden="true"></span>' + TABS.map((s) => '<button class="tab" data-act="tabGo" data-v="' + s + '">' + ICON['tab_' + s] + '<span>' + esc(lab[s]) + '</span></button>').join('') + '</div>';
+    }
+    const wasHidden = el.hidden;
+    el.hidden = i < 0 || !!S.sheet;
+    if (i < 0) return;
+    if (wasHidden && !reducedMotion()) { el.classList.add('pop'); setTimeout(() => el.classList.remove('pop'), 400); }
+    el.querySelector('.tab-thumb').style.transform = 'translateX(' + (i * 100) + '%)';
+    el.querySelectorAll('.tab').forEach((b, k) => { if (k === i) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  A.tabGo = (ds) => { if (S.screen === ds.v) { window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' }); return; } go(ds.v); };
   function closeSheet() { S.sheet = null; renderSheet(); }
   function toast(msg) {
     const root = $('#toast');
@@ -417,7 +565,7 @@
 
   /* ---------- small components ---------- */
   function topbar(titleHtml, back, right) {
-    return '<header class="top"><button class="icon-btn" data-act="' + back + '" aria-label="' + h('back') + '">' + ICON.back + '</button>' +
+    return '<header class="top">' + (back ? '<button class="icon-btn" data-act="' + back + '" aria-label="' + h('back') + '">' + ICON.back + '</button>' : '<span class="icon-spacer" aria-hidden="true"></span>') +
       '<h1 class="top-title">' + titleHtml + '</h1>' + (right || '<span class="icon-spacer" aria-hidden="true"></span>') + '</header>';
   }
   const iconBtn = (act, icon, label) => '<button class="icon-btn" data-act="' + act + '" aria-label="' + esc(label) + '">' + icon + '</button>';
@@ -444,7 +592,14 @@
       body + '</div>';
   }
   const smallBtn = (act, icon, label, extra) => '<button class="pill pill-sm" data-act="' + act + '" ' + (extra || '') + '>' + (icon || '') + '<span>' + esc(label) + '</span></button>';
-  function ballChip(b) { const x = E.ballText(b); return '<span class="tb tone-' + x.tone + (b.legal ? '' : ' mini') + '" title="' + esc(x.t) + '"><b>' + esc(x.t) + '</b></span>'; }
+  function ballChip(b, fx) {
+    const x = E.ballText(b);
+    const chipHtml = '<span class="tb tone-' + x.tone + (b.legal ? '' : ' mini') + '" title="' + esc(x.t) + '"><b>' + esc(x.t) + '</b></span>';
+    // A boundary that was just hit gets a one-time pop: orange ripple for a four, purple burst with sparks for a six.
+    if (fx && x.tone === 'w') return chipHtml.replace('class="tb ', 'class="tb drop ');
+    if (fx && (x.tone === '4' || x.tone === '6')) return '<span class="fx fx' + x.tone + '">' + chipHtml + '<i class="ring" aria-hidden="true"></i>' + (x.tone === '6' ? '<i class="sparks" aria-hidden="true"></i><i class="sparks s2" aria-hidden="true"></i>' : '') + '</span>';
+    return chipHtml;
+  }
 
   /* ---------- HOME ---------- */
   VIEWS.home = () => {
@@ -463,8 +618,7 @@
         (wt ? '<button class="pill pill-lg wide pick-pill" data-act="againWinner"><span>' + h('winnerPick') + '</span><small>' + h('winnerPickSub', { team: wt.name }) + '</small></button>' : '') +
         '</div></section>';
     }
-    x += '<div class="sec-row"><h2 class="sec">' + h('history') + '</h2>' + (done.length > 4 ? '<button class="link" data-act="history">' + h('seeAll') + '</button>' : '') + '</div>';
-    x += done.length ? '<div class="list">' + done.slice(0, 4).map(rowItem).join('') + '</div>' : '<p class="meta" style="padding:0 4px">' + h('noHistory') + '</p>';
+    x += todayCard(done);
     if (!D.matches.length) x += howItWorks();
     return [x, ''];
   };
@@ -477,43 +631,112 @@
       '<p class="big-line">' + esc(m.teams.A.name) + ' <span class="vs">vs</span> ' + esc(m.teams.B.name) + '</p><p class="score-line">' + line + '</p>' +
       '<button class="pill primary wide" data-act="resume">' + h('resume') + '</button></section>';
   }
-  function rowItem(m) {
+  function rowItem(m, k) {
     const res = m.status === 'done' && m.result ? resultText(m) : t('liveNow');
-    return '<button class="row-item" data-act="openMatch" data-id="' + esc(m.id) + '"><span class="ri-no">#' + (+m.no || 0) + '</span>' +
+    return '<button class="row-item" style="--k:' + (+k || 0) + '" data-act="openMatch" data-id="' + esc(m.id) + '"><span class="ri-no">#' + (+m.no || 0) + '</span>' +
       '<span class="ri-main"><b>' + esc(m.teams.A.name) + ' <span class="vs">v</span> ' + esc(m.teams.B.name) + '</b><small>' + esc(res) + '</small></span>' +
       '<span class="ri-date">' + esc(fmtDate(m.createdAt)) + '</span></button>';
   }
   function howItWorks() {
     const demo = [{ kind: 'legal', bat: 1, runs: 1, legal: true }, { kind: 'legal', bat: 4, runs: 4, legal: true }, { kind: 'legal', bat: 0, runs: 0, legal: true },
       { kind: 'wide', bat: 0, ext: 0, runs: 1, legal: false }, { kind: 'legal', bat: 0, runs: 0, w: 'bowled', legal: true }, { kind: 'legal', bat: 6, runs: 6, legal: true }, { kind: 'legal', bat: 2, runs: 2, legal: true }];
-    return '<section class="pane"><h2 class="sec">' + h('howTitle') + '</h2><div class="balls" aria-hidden="true">' + demo.map(ballChip).join('') + '</div>' +
+    return '<section class="pane"><h2 class="sec">' + h('howTitle') + '</h2><div class="balls" aria-hidden="true">' + demo.map((b) => ballChip(b)).join('') + '</div>' +
       '<ol class="steps"><li>' + h('how1') + '</li><li>' + h('how2') + '</li><li>' + h('how3') + '</li><li>' + h('how4') + '</li></ol></section>';
   }
   VIEWS.history = () => {
     const all = D.matches.slice().reverse();
-    return [topbar(h('history'), 'home') + (all.length ? '<div class="list">' + all.map(rowItem).join('') + '</div>' : '<p class="meta">' + h('noHistory') + '</p>'), ''];
+    return [topbar(h('history'), null) + (all.length ? '<div class="list">' + all.map(rowItem).join('') + '</div>' : '<p class="meta">' + h('noHistory') + '</p>'), ''];
   };
 
+  /* ---------- REGULARS (first launch + edit list) ---------- */
+  function needsWelcome() { return !D.onboarded && !D.regulars.length && !D.matches.length && !D.teams.length; }
+  function splitNames(v) { return String(v || '').split(/[,\n;]+/).map(cleanName).filter(Boolean); }
+  VIEWS.regulars = () => {
+    const welcome = S.regMode === 'welcome';
+    if (welcome && D.onboarded) { S.screen = 'home'; return null; } // data arrived from the cloud: nothing to set up
+    const regs = D.regulars;
+    let x = welcome
+      ? '<header class="hero"><div class="brand"><span class="tb tb-logo" aria-hidden="true"></span><div><h1 class="brand-name">' + h('app') + '</h1><p class="brand-sub">' + h('tagline') + '</p></div></div>' + iconBtn('settings', ICON.gear, t('settings')) + '</header>'
+      : topbar(h('regulars'), 'regBack');
+    x += '<section class="pane"><h2 class="sec">' + h('regTitle') + '</h2><p class="meta" style="margin:-6px 0 14px">' + h('regSub') + '</p>' +
+      '<div class="add-row"><label class="sr" for="regAdd">' + h('addPlaceholder') + '</label><input id="regAdd" class="field" data-enter="regAdd" placeholder="' + h('addPlaceholder') + '" maxlength="400" autocomplete="off" enterkeyhint="done">' +
+      '<button class="pill" data-act="regAdd">' + ICON.plus + '<span>' + h('addPlayer') + '</span></button></div>' +
+      (regs.length ? '<ul class="roster">' + regs.map((r, i) => '<li><span class="num">' + (i + 1) + '</span><span class="pname">' + esc(r.name) + '</span><button class="icon-sm" data-act="regRm" data-id="' + esc(r.id) + '" aria-label="' + h('removePlayer', { name: r.name }) + '">' + ICON.x + '</button></li>').join('') + '</ul>'
+        : '<p class="meta reg-empty">' + h('regEmpty') + '</p>') +
+      '<p class="meta">' + h('players', { n: regs.length }) + '</p></section>';
+    const btn = welcome && !regs.length ? '<button class="pill" data-act="regDone">' + h('regSkip') + '</button>' : '<button class="pill primary" data-act="regDone">' + h('regDone') + '</button>';
+    return [x, btn];
+  };
+  function addTypedRegulars(input) {
+    const names = splitNames(input && input.value);
+    names.forEach(addRegular);
+    if (input) input.value = '';
+    return names.length;
+  }
+  A.regAdd = () => {
+    const input = document.getElementById('regAdd');
+    if (!input) return;
+    if (!addTypedRegulars(input)) { input.focus(); return; }
+    Store.touchMeta();
+    render({ focus: 'regAdd' });
+  };
+  A.regRm = (ds) => { D.regulars = D.regulars.filter((r) => r.id !== ds.id); Store.touchMeta(); render(); };
+  A.regDone = () => {
+    addTypedRegulars(document.getElementById('regAdd')); // a name typed but not added yet still counts
+    if (S.regMode === 'welcome') { D.onboarded = true; Store.touchMeta(); go('home'); return; }
+    Store.touchMeta();
+    A.regBack();
+  };
+  A.regBack = () => { const b = S.regBack; go(b && b !== 'regulars' && VIEWS[b] ? b : 'home'); };
+  A.regEdit = () => { if (S.screen !== 'regulars') S.regBack = S.screen; S.regMode = 'edit'; S.sheet = null; go('regulars'); };
+
   /* ---------- TEAMS ---------- */
+  const hasName = (tm, name) => tm.players.some((p) => norm(p.name) === norm(name));
+  const isJokerName = (d, name) => !!(d.joker.on && cleanName(d.joker.name) && norm(d.joker.name) === norm(name));
+  function freeId(d, id) {
+    const used = d.A.players.concat(d.B.players).some((p) => p.id === id) || (d.joker.on && d.joker.id === id);
+    return used ? uid('p') : id;
+  }
+  /* Adds a regular to a team. Returns false (with a toast) when they're already on the other side or are the common player. */
+  function putInTeam(d, side, r) {
+    const tm = d[side], oth = d[E.other(side)];
+    if (hasName(tm, r.name)) return false;
+    if (hasName(oth, r.name)) { toast(t('alreadyIn', { name: r.name, team: oth.name })); return false; }
+    if (isJokerName(d, r.name)) { toast(t('isCommon', { name: r.name })); return false; }
+    if (tm.players.length >= MAX_PLAYERS) { toast(t('maxPlayers')); return false; }
+    tm.players.push({ id: freeId(d, r.id), name: r.name });
+    return true;
+  }
+  function checkRow(act, r, on, disabled, tag) {
+    return '<button class="pick check" data-act="' + act + '" data-id="' + esc(r.id) + '" aria-pressed="' + !!on + '"' + (disabled ? ' disabled' : '') + '>' +
+      '<span class="ck" aria-hidden="true">' + ICON.check + '</span><span class="pn">' + esc(r.name) + '</span>' + (tag ? '<small class="tag">' + tag + '</small>' : '') + '</button>';
+  }
+  const sheetAddRow = () => '<div class="add-row sheet-add"><label class="sr" for="sheetAdd">' + h('newName') + '</label><input id="sheetAdd" class="field" data-enter="sheetAdd" placeholder="' + h('newName') + '" maxlength="400" autocomplete="off" enterkeyhint="done">' +
+    '<button class="pill" data-act="sheetAdd">' + ICON.plus + '<span>' + h('addPlayer') + '</span></button></div>';
   VIEWS.teams = () => {
     const d = S.draft;
     if (!d) { S.screen = 'home'; return null; }
     let x = topbar(h('teams'), 'home');
-    if (d.example) x += '<div class="note"><span>' + h('exampleNote') + '</span><button class="pill pill-sm" data-act="clearExample">' + h('clear') + '</button></div>';
+    x += '<section class="pane rand"><div class="rand-text"><b>' + h('randTitle') + '</b><span>' + h('randSub') + '</span></div><div class="rand-acts">' +
+      '<button class="pill" data-act="randOpen">' + ICON.dice + '<span>' + h('randBtn') + '</span></button>' +
+      (d.rand ? '<button class="pill" data-act="randAgain">' + ICON.shuffle + '<span>' + h('randAgain') + '</span></button>' : '') + '</div></section>';
+    if (d.autoJoker && d.joker.on) {
+      x += '<div class="note note-wrap" role="status"><span>' + h('bothNote', { name: d.joker.name }) + '</span><span class="note-acts">' +
+        '<button class="pill pill-sm" data-act="commonOpen">' + h('change') + '</button><button class="pill pill-sm" data-act="randMore">' + h('addOneMore') + '</button></span></div>';
+    }
     x += teamCard('A') + teamCard('B') + jokerCard();
     if (S.teamErr.length) x += '<div class="errors" role="alert">' + S.teamErr.map((e) => '<span>' + esc(e) + '</span>').join('') + '</div>';
     return [x, '<button class="pill primary" data-act="toRules">' + h('nextRules') + '</button>'];
   };
   function teamCard(side) {
-    const d = S.draft, tm = d[side], oth = d[E.other(side)];
-    const saved = D.teams.filter((s) => s.id !== oth.id);
+    const d = S.draft, tm = d[side];
     const c = safeColor(tm.color);
     return '<section class="pane team" style="--team:' + c + '">' +
       '<div class="team-head"><span class="team-dot" aria-hidden="true"></span><label class="sr" for="name' + side + '">' + h('teamName') + '</label>' +
-      '<input id="name' + side + '" class="field field-name" data-in="name" data-side="' + side + '" value="' + esc(tm.name) + '" placeholder="' + h(side === 'A' ? 'teamA' : 'teamB') + '" maxlength="24" autocomplete="off"></div>' +
-      (saved.length ? '<div class="chip-row saved-row" role="group" aria-label="' + h('pickSaved') + '">' + saved.map((s) => chip('<i style="--c:' + safeColor(s.color) + '"></i>' + esc(s.name) + ' <small>' + s.players.length + '</small>', s.id === tm.id, 'loadSaved', 'data-side="' + side + '" data-id="' + esc(s.id) + '"')).join('') + '</div>' : '') +
+      '<input id="name' + side + '" class="field field-name" data-in="name" data-side="' + side + '" value="' + esc(tm.name) + '" placeholder="' + h(side === 'A' ? 'team1' : 'team2') + '" maxlength="24" autocomplete="off"></div>' +
       '<div class="swatches" role="radiogroup" aria-label="' + h('color') + '">' + COLORS.map((o) => '<button class="swatch" style="--c:' + o.c + '" role="radio" aria-checked="' + (o.c === c) + '" aria-label="' + o.n + '" data-act="color" data-side="' + side + '" data-v="' + o.c + '"></button>').join('') + '</div>' +
-      '<ul class="roster">' + tm.players.map((p, i) => '<li><span class="num">' + (i + 1) + '</span><span class="pname">' + esc(p.name) + '</span><button class="icon-sm" data-act="rmPlayer" data-side="' + side + '" data-id="' + esc(p.id) + '" aria-label="' + h('removePlayer', { name: p.name }) + '">' + ICON.x + '</button></li>').join('') + '</ul>' +
+      (tm.players.length ? '<ul class="roster">' + tm.players.map((p, i) => '<li><span class="num">' + (i + 1) + '</span><span class="pname">' + esc(p.name) + '</span><button class="icon-sm" data-act="rmPlayer" data-side="' + side + '" data-id="' + esc(p.id) + '" aria-label="' + h('removePlayer', { name: p.name }) + '">' + ICON.x + '</button></li>').join('') + '</ul>' : '') +
+      '<button class="pill wide reg-btn" data-act="regPick" data-side="' + side + '">' + ICON.list + '<span>' + h('pickRegulars') + '</span></button>' +
       '<div class="add-row"><label class="sr" for="add' + side + '">' + h('addPlaceholder') + '</label><input id="add' + side + '" class="field" data-enter="addPlayer" data-side="' + side + '" placeholder="' + h('addPlaceholder') + '" maxlength="300" autocomplete="off" enterkeyhint="done">' +
       '<button class="pill" data-act="addPlayer" data-side="' + side + '">' + ICON.plus + '<span>' + h('addPlayer') + '</span></button></div>' +
       '<p class="meta">' + h('players', { n: tm.players.length }) + '</p></section>';
@@ -525,58 +748,199 @@
         switchRow('jokerBowls', t('jokerBowls'), j.bowls) : '') + '</section>';
   }
   INPUT.name = (el) => { S.draft[el.dataset.side].name = el.value; };
-  INPUT.jokerName = (el) => { S.draft.joker.name = el.value; };
+  INPUT.jokerName = (el) => { S.draft.joker.name = el.value; S.draft.autoJoker = false; };
   A.addPlayer = (ds) => {
     const side = ds.side, input = document.getElementById('add' + side);
     if (!input) return;
-    const tm = S.draft[side];
-    const names = input.value.split(/[,\n;]+/).map((s) => s.trim().slice(0, 24)).filter(Boolean);
+    const names = splitNames(input.value);
     if (!names.length) { input.focus(); return; }
-    for (const n of names) {
-      if (tm.players.length >= MAX_PLAYERS) { toast(t('maxPlayers')); break; }
-      tm.players.push({ id: uid('p'), name: n });
-    }
+    names.forEach((n) => { const r = addRegular(n); if (r) putInTeam(S.draft, side, r); });
     input.value = '';
     S.teamErr = [];
+    Store.touchMeta();
     render({ focus: 'add' + side });
   };
   A.rmPlayer = (ds) => { const tm = S.draft[ds.side]; tm.players = tm.players.filter((p) => p.id !== ds.id); render(); };
   A.color = (ds) => { S.draft[ds.side].color = safeColor(ds.v); render(); };
-  A.loadSaved = (ds) => {
-    const s = teamById(ds.id);
-    if (!s) return;
-    const oth = S.draft[E.other(ds.side)];
-    if (oth.id === s.id) { toast(t('inOtherSlot', { name: s.name })); return; }
-    S.draft[ds.side] = teamCopy(s);
-    S.draft.example = false;
+  A.jokerToggle = () => {
+    const d = S.draft, j = d.joker;
+    if (j.on && d.autoJoker && cleanName(j.name)) {
+      // The odd-count common player is switched off: they join the smaller team instead.
+      const side = d.A.players.length <= d.B.players.length ? 'A' : 'B', id = j.id, name = cleanName(j.name);
+      j.on = false; d.autoJoker = false;
+      if (!hasName(d[side], name)) d[side].players.push({ id: freeId(d, id), name });
+      j.name = ''; j.id = uid('j');
+      render();
+      return;
+    }
+    j.on = !j.on; d.autoJoker = false;
+    render(j.on ? { focus: 'jokerName' } : {});
+  };
+  A.jokerBowls = () => { S.draft.joker.bowls = !S.draft.joker.bowls; render(); };
+
+  /* pick from regulars (per team) */
+  A.regPick = (ds) => { S.sheet = { type: 'regPick', side: ds.side === 'B' ? 'B' : 'A' }; renderSheet(); };
+  SHEETS.regPick = () => {
+    const d = S.draft;
+    if (!d) return '';
+    const side = S.sheet.side, tm = d[side], oth = d[E.other(side)];
+    const regs = sortedRegulars();
+    const rows = regs.map((r) => {
+      const mine = hasName(tm, r.name), theirs = !mine && hasName(oth, r.name), common = !mine && !theirs && isJokerName(d, r.name);
+      return checkRow('regToggle', r, mine, theirs || common, theirs ? esc(oth.name) : common ? h('commonTag') : '');
+    }).join('');
+    return sheetWrap(t('pickFor', { team: tm.name || t(side === 'A' ? 'team1' : 'team2') }),
+      '<p class="sheet-sub">' + h('pickedN', { n: tm.players.length }) + '</p>' +
+      (regs.length ? '<div class="pick-list">' + rows + '</div>' : '<p class="meta">' + h('noRegulars') + '</p>') + sheetAddRow() +
+      '<div class="sheet-foot"><button class="link" data-act="regEdit">' + h('editList') + '</button><button class="pill primary" data-act="sheetDone">' + h('regDone') + '</button></div>');
+  };
+  A.regToggle = (ds) => {
+    const d = S.draft, sh = S.sheet;
+    if (!d || !sh) return;
+    const r = D.regulars.find((x) => x.id === ds.id);
+    if (!r) return;
+    const tm = d[sh.side];
+    if (hasName(tm, r.name)) tm.players = tm.players.filter((p) => norm(p.name) !== norm(r.name));
+    else if (!putInTeam(d, sh.side, r)) return;
     S.teamErr = [];
     render();
   };
-  A.clearExample = () => { const d = newDraft(true); d.joker = S.draft.joker; S.draft = d; render(); };
-  A.jokerToggle = () => { S.draft.joker.on = !S.draft.joker.on; render(S.draft.joker.on ? { focus: 'jokerName' } : {}); };
-  A.jokerBowls = () => { S.draft.joker.bowls = !S.draft.joker.bowls; render(); };
+  A.sheetAdd = () => {
+    const input = document.getElementById('sheetAdd'), d = S.draft, sh = S.sheet;
+    if (!input || !d || !sh) return;
+    const names = splitNames(input.value);
+    if (!names.length) { input.focus(); return; }
+    names.forEach((n) => {
+      const r = addRegular(n);
+      if (!r) return;
+      if (sh.type === 'regPick') putInTeam(d, sh.side, r);
+      else if (sh.type === 'rand' && sh.sel.indexOf(r.id) < 0) sh.sel.push(r.id);
+    });
+    input.value = '';
+    Store.touchMeta();
+    render({ focus: 'sheetAdd' });
+  };
+  A.sheetDone = () => { S.sheet = null; render(); };
+
+  /* randomise: tick who's playing, split evenly; the common player stays out of the shuffle */
+  const manualJoker = (d) => (d.joker.on && !d.autoJoker && cleanName(d.joker.name) ? cleanName(d.joker.name) : null);
+  function randPlan(d, sel) {
+    const manual = manualJoker(d);
+    const pool = sel.map((id) => D.regulars.find((r) => r.id === id)).filter((r) => r && !(manual && norm(r.name) === norm(manual)));
+    const n = pool.length, odd = n % 2 === 1, k = Math.floor(n / 2);
+    let msg = '', ok = false;
+    if (n < 4) msg = t('randNeed');
+    else if (odd && manual) msg = t('randOddFixed', { name: manual });
+    else if (k > MAX_PLAYERS) msg = t('maxPlayers');
+    else { ok = true; msg = t(odd ? 'randOdd' : 'randEven', { n, k }); }
+    return { pool, manual, odd, ok, msg };
+  }
+  A.randOpen = () => {
+    const d = S.draft;
+    if (!d) return;
+    let sel;
+    if (d.rand) sel = d.rand.sel.filter((id) => D.regulars.some((r) => r.id === id));
+    else {
+      const names = d.A.players.concat(d.B.players).map((p) => p.name);
+      if (d.autoJoker && d.joker.on) names.push(d.joker.name);
+      sel = names.map(findRegular).filter(Boolean).map((r) => r.id);
+    }
+    S.sheet = { type: 'rand', sel: Array.from(new Set(sel)) };
+    renderSheet();
+  };
+  SHEETS.rand = () => {
+    const d = S.draft;
+    if (!d) return '';
+    const sel = S.sheet.sel, regs = sortedRegulars(), plan = randPlan(d, sel);
+    const can = (r) => !(plan.manual && norm(r.name) === norm(plan.manual));
+    const allOn = regs.filter(can).every((r) => sel.indexOf(r.id) >= 0);
+    const rows = regs.map((r) => checkRow('randToggle', r, can(r) && sel.indexOf(r.id) >= 0, !can(r), can(r) ? '' : h('commonTag'))).join('');
+    return sheetWrap(t('whoPlaying'),
+      '<div class="sheet-row"><p class="sheet-sub">' + h('randSub') + '</p>' + (regs.length ? '<button class="link" data-act="randAll">' + h(allOn ? 'selectNone' : 'selectAll') + '</button>' : '') + '</div>' +
+      (plan.manual ? '<p class="meta">' + h('randCommonNote', { name: plan.manual }) + '</p>' : '') +
+      (regs.length ? '<div class="pick-list">' + rows + '</div>' : '<p class="meta">' + h('noRegulars') + '</p>') + sheetAddRow() +
+      '<div class="sheet-foot col"><p class="rand-status' + (plan.ok ? '' : ' warn') + '" aria-live="polite">' + esc(plan.msg) + '</p>' +
+      '<button class="pill primary wide" data-act="randMake"' + (plan.ok ? '' : ' disabled') + '>' + ICON.dice + '<span>' + h('randMake') + '</span></button></div>');
+  };
+  A.randToggle = (ds) => { const sel = S.sheet.sel, i = sel.indexOf(ds.id); if (i >= 0) sel.splice(i, 1); else sel.push(ds.id); renderSheet(); };
+  A.randAll = () => {
+    const d = S.draft, sh = S.sheet, manual = manualJoker(d);
+    const ids = D.regulars.filter((r) => !(manual && norm(r.name) === norm(manual))).map((r) => r.id);
+    sh.sel = ids.every((id) => sh.sel.indexOf(id) >= 0) ? [] : ids;
+    renderSheet();
+  };
+  function makeTeams(d, sel) {
+    const plan = randPlan(d, sel);
+    if (!plan.ok) { toast(plan.msg); return false; }
+    let pool = plan.pool.slice(), common = null;
+    const pin = d.rand && d.rand.pin;
+    if (plan.odd) {
+      common = pool.find((r) => r.id === pin) || pool[randInt(pool.length)];
+      pool = pool.filter((r) => r !== common);
+    }
+    shuffle(pool);
+    const half = pool.length / 2;
+    d.A.players = pool.slice(0, half).map((r) => ({ id: r.id, name: r.name }));
+    d.B.players = pool.slice(half).map((r) => ({ id: r.id, name: r.name }));
+    if (common) { d.joker.on = true; d.joker.id = common.id; d.joker.name = common.name; d.autoJoker = true; }
+    else if (d.autoJoker) { d.joker = { on: false, id: uid('j'), name: '', bowls: d.joker.bowls }; d.autoJoker = false; }
+    d.rand = { sel: sel.slice(), pin: common && common.id === pin ? pin : null };
+    return true;
+  }
+  A.randMake = () => { const d = S.draft; if (!d || !S.sheet) return; if (makeTeams(d, S.sheet.sel)) { S.sheet = null; S.teamErr = []; haptic(20); render(); } };
+  A.randAgain = () => { const d = S.draft; if (d && d.rand && makeTeams(d, d.rand.sel)) { S.teamErr = []; haptic(20); render(); } };
+  A.randMore = () => { A.randOpen(); const el = document.getElementById('sheetAdd'); if (el) el.focus(); };
+  A.commonOpen = () => { S.sheet = { type: 'common' }; renderSheet(); };
+  SHEETS.common = () => {
+    const d = S.draft;
+    if (!d || !d.joker.on) return '';
+    const rows = (side) => d[side].players.map((p) => '<button class="pick" data-act="commonPick" data-side="' + side + '" data-id="' + esc(p.id) + '"><span>' + esc(p.name) + '</span><small>' + esc(d[side].name) + '</small></button>').join('');
+    return sheetWrap(t('pickCommon'), '<p class="sheet-sub">' + h('pickCommonSub', { name: d.joker.name }) + '</p><div class="pick-list">' + rows('A') + rows('B') + '</div>');
+  };
+  A.commonPick = (ds) => {
+    const d = S.draft, tm = d && d[ds.side];
+    if (!tm || !d.joker.on) return;
+    const i = tm.players.findIndex((p) => p.id === ds.id);
+    if (i < 0) return;
+    const chosen = tm.players[i];
+    tm.players[i] = { id: d.joker.id, name: cleanName(d.joker.name) };
+    d.joker.id = chosen.id; d.joker.name = chosen.name; d.autoJoker = true;
+    if (d.rand) d.rand.pin = chosen.id;
+    S.sheet = null;
+    render();
+  };
+
   function validateTeams(d) {
     const errs = [];
-    const an = d.A.name.trim(), bn = d.B.name.trim();
-    if (!an || !bn) errs.push(t('errName'));
-    else if (an.toLowerCase() === bn.toLowerCase()) errs.push(t('errSame'));
+    if (norm(d.A.name) === norm(d.B.name)) errs.push(t('errSame'));
     if (d.A.players.length < 2 || d.B.players.length < 2) errs.push(t('errPlayers'));
-    if (d.joker.on && !d.joker.name.trim()) errs.push(t('errJoker'));
+    const dup = d.A.players.find((p) => hasName(d.B, p.name));
+    if (dup) errs.push(t('errDup', { name: dup.name }));
+    if (d.joker.on && !cleanName(d.joker.name)) errs.push(t('errJoker'));
+    else if (d.joker.on && (hasName(d.A, d.joker.name) || hasName(d.B, d.joker.name))) errs.push(t('errJokerInTeam', { name: cleanName(d.joker.name) }));
     return errs;
   }
+  /* Teams are kept only so "play again", series counts and per-pair rules work; the newest ones are enough. */
   function upsertTeam(tm) {
-    const x = { id: tm.id, name: tm.name.trim(), color: safeColor(tm.color), players: tm.players.map((p) => ({ id: p.id, name: p.name })), updatedAt: Date.now() };
+    const x = { id: tm.id, name: cleanName(tm.name), color: safeColor(tm.color), players: tm.players.map((p) => ({ id: p.id, name: p.name })), updatedAt: Date.now() };
     const i = D.teams.findIndex((y) => y.id === tm.id);
     if (i >= 0) D.teams[i] = x; else D.teams.push(x);
+    const keep = new Set(D.last ? [D.last.A, D.last.B] : []);
+    D.teams = D.teams.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).filter((y, k) => k < 24 || keep.has(y.id));
   }
   A.toRules = () => {
     const d = S.draft;
+    d.A.name = cleanName(d.A.name) || t('team1'); d.B.name = cleanName(d.B.name) || t('team2');
     S.teamErr = validateTeams(d);
     if (S.teamErr.length) { render(); const el = document.querySelector('.errors'); if (el) el.scrollIntoView({ block: 'center' }); return; }
-    d.A.name = d.A.name.trim(); d.B.name = d.B.name.trim(); d.joker.name = d.joker.name.trim();
-    upsertTeam(d.A); upsertTeam(d.B); d.example = false;
+    d.joker.name = cleanName(d.joker.name);
+    // Everyone who plays lands in the regulars list, so next time they're one tap away.
+    const all = d.A.players.concat(d.B.players);
+    all.forEach((p) => addRegular(p.name));
+    if (d.joker.on) { const r = addRegular(d.joker.name); if (r && r.id !== d.joker.id && !all.some((p) => p.id === r.id)) d.joker.id = r.id; }
+    upsertTeam(d.A); upsertTeam(d.B);
     const saved = D.pairCfg[pairKey(d.A.id, d.B.id)];
-    if (saved && !d.cfgTouched) d.config = Object.assign(clone(E.PRESETS.gully), { houseRules: [] }, saved);
+    if (saved && !d.cfgTouched) d.config = cfgBase(saved);
     Store.touchMeta();
     go('rules');
   };
@@ -592,6 +956,7 @@
   VIEWS.rules = () => {
     const d = S.draft;
     if (!d) { S.screen = 'home'; return null; }
+    Coin3D.prefetch();
     const c = d.config, preset = detectPreset(c);
     const sw = (key, label, on) => switchRow('toggleRule', label, on, '', 'data-k="' + key + '"');
     let x = topbar(h('rules'), 'toTeams');
@@ -603,8 +968,9 @@
       '<button class="icon-btn" data-act="oversStep" data-v="1" aria-label="+">' + ICON.plus + '</button></div></div>' +
       '<div class="chip-row">' + [2, 3, 4, 5, 6, 8, 10, 20].map((n) => chip(String(n), c.overs === n, 'setNum', 'data-k="overs" data-v="' + n + '"')).join('') + '</div>' +
       '<div class="stepper-row" style="margin-top:16px"><span>' + h('bpo') + '</span>' + seg('setNum', [[4, '4'], [5, '5'], [6, '6']], c.ballsPerOver, 'ballsPerOver') + '</div></section>';
-    x += '<section class="pane"><h2 class="sec">' + h('extras') + '</h2>' + sw('wideRuns', t('wideRun'), c.wideRuns > 0) + sw('wideRebowl', t('wideRebowl'), c.wideRebowl) +
-      sw('nbRuns', t('nbRun'), c.nbRuns > 0) + sw('nbRebowl', t('nbRebowl'), c.nbRebowl) + sw('freeHit', t('freeHit'), c.freeHit) + sw('byes', t('byes'), c.byes) + '</section>';
+    x += '<section class="pane"><h2 class="sec">' + h('extras') + '</h2>' + sw('wideRuns', t('wideRun'), c.wideRuns > 0) +
+      sw('nbRuns', t('nbRun'), c.nbRuns > 0) + sw('freeHit', t('freeHit'), c.freeHit) + sw('byes', t('byes'), c.byes) +
+      '<p class="meta">' + h('rebowlNote') + '</p></section>';
     x += '<section class="pane"><h2 class="sec">' + h('outs') + '</h2>' + sw('sixOut', t('sixOut'), c.sixOut) + (c.sixOut ? sw('sixOutRuns', t('sixOutRuns'), c.sixOutRuns) : '') +
       (c.singleBatter ? '' : sw('lastManStands', t('lastMan'), c.lastManStands)) + sw('lbw', t('lbw'), c.lbw) + sw('hitWicket', t('hitWicket'), c.hitWicket) + '</section>';
     x += '<section class="pane"><h2 class="sec">' + h('batting') + '</h2><div class="stepper-row"><span>' + h('creaseQ') + '</span>' +
@@ -619,9 +985,10 @@
       HOUSE.map((k) => chip(h('h_' + k), (c.houseRules || []).indexOf(k) >= 0, 'house', 'data-k="' + k + '"')).join('') + '</div></section>';
     return [x, '<button class="pill primary" data-act="toToss">' + h('nextToss') + '</button>'];
   };
-  A.preset = (ds) => { const d = S.draft; Object.assign(d.config, clone(E.PRESETS[ds.v])); d.cfgTouched = true; render(); };
+  A.preset = (ds) => { const d = S.draft; if (!E.PRESETS[ds.v]) return; Object.assign(d.config, clone(E.PRESETS[ds.v]), { wideRebowl: true, nbRebowl: true }); d.cfgTouched = true; render(); };
   A.toggleRule = (ds) => {
     const c = S.draft.config, k = ds.k;
+    if (k === 'wideRebowl' || k === 'nbRebowl') return;
     if (k === 'wideRuns' || k === 'nbRuns') c[k] = c[k] > 0 ? 0 : 1; else c[k] = !c[k];
     S.draft.cfgTouched = true; render();
   };
@@ -666,13 +1033,14 @@
       if (ts.real && !ts.result) {
         x += '<section class="pane"><h2 class="sec">' + h('whatLanded') + '</h2><div class="duo">' + ['H', 'T'].map((v) => '<button class="pill pill-lg" data-act="landed" data-v="' + v + '">' + h(v === 'H' ? 'heads' : 'tails') + '</button>').join('') + '</div></section>';
       } else if (!ts.real || ts.result) {
-        const cls = ts.flipping ? ' flip-' + ts.result : (ts.result === 'T' ? ' show-T' : '');
-        x += '<section class="pane toss-result">' + (ts.real ? '' : '<div class="coin-stage"><div class="coin' + cls + '"><div class="face heads">H<small>' + h('heads') + '</small></div><div class="face tails">T<small>' + h('tails') + '</small></div></div></div>');
+        x += '<section class="pane toss-result">' + (ts.real ? '' : coinHtml(ts));
         if (!ts.result) x += '<button class="pill pill-xl primary wide" data-act="flip">' + h('flip') + '</button>';
         else if (ts.flipping) x += '<p class="big-line" aria-live="polite">' + h('flipping') + '</p>';
         else {
-          x += '<p class="eyebrow" style="justify-content:center">' + h('itsX', { side: t(ts.result === 'H' ? 'heads' : 'tails') }) + '</p>' +
-            '<h2 class="display" aria-live="polite">' + h('wonToss', { team: d[ts.winner].name }) + '</h2>' +
+          const rv = S.reveal ? ' reveal' : '';
+          S.reveal = false;
+          x += '<p class="eyebrow' + rv + '" style="justify-content:center">' + h('itsX', { side: t(ts.result === 'H' ? 'heads' : 'tails') }) + '</p>' +
+            '<h2 class="display' + rv + '" aria-live="polite">' + h('wonToss', { team: d[ts.winner].name }) + '</h2>' +
             '<p class="label">' + h('choose', { team: d[ts.winner].name }) + '</p><div class="duo">' +
             ['bat', 'bowl'].map((v) => '<button class="pill pill-lg" data-act="choice" data-v="' + v + '" aria-pressed="' + (ts.choice === v) + '">' + h(v) + '</button>').join('') + '</div>' +
             '<button class="link" data-act="resetToss" style="margin-top:6px">' + h('resetToss') + '</button>';
@@ -682,11 +1050,174 @@
     }
     return [x, ts.choice ? '<button class="pill primary" data-act="startMatch">' + h('startMatch') + '</button>' : ''];
   };
+  /* Gold coin: two embossed faces, a ridged edge built from stacked layers, a sheen that sweeps across the metal,
+     and a toss arc (up, spin, land, small bounce) with a shadow that shrinks as the coin rises. */
+  const COIN_MS = 1850, COIN_LAND_MS = 1450;
+  function coinHtml(ts) {
+    const flying = ts.flipping && !reducedMotion();
+    Coin3D.prefetch();
+    if (Coin3D.usable()) return '<div class="coin-stage" aria-hidden="true"><div class="coin-shadow' + (flying ? ' go' : '') + '"></div><div class="coin-toss' + (flying ? ' go' : '') + '"><div class="coin3d-slot" data-keep></div></div></div>';
+    const cls = flying ? ' flip-' + ts.result : (ts.result === 'T' ? ' show-T' : '');
+    const edge = Array.from({ length: 9 }, (_, i) => '<i style="--z:' + (i * 1.1 - 4.4).toFixed(1) + 'px"></i>').join('');
+    const face = (k, label) => '<div class="face ' + (k === 'H' ? 'heads' : 'tails') + '">' + COIN_EMB[k] + '<small>' + label + '</small><i class="sheen" aria-hidden="true"></i></div>';
+    return '<div class="coin-stage" aria-hidden="true"><div class="coin-shadow' + (flying ? ' go' : '') + '"></div><div class="coin-toss' + (flying ? ' go' : '') + '"><div class="coin' + cls + '">' +
+      '<div class="coin-edge">' + edge + '</div>' + face('H', h('heads')) + face('T', h('tails')) + '</div></div></div>';
+  }
+  /* Real 3D gold coin (three.js, loaded on demand): mirror-polished field, frosted raised emblems, reeded edge,
+     studio reflections that slide over the metal as it spins. Falls back to the CSS coin when WebGL or the library is missing. */
+  const Coin3D = (function () {
+    const PX = 184;
+    let st = null, loading = null, failed = false;
+    const can = () => !failed && !(navigator.deviceMemory && navigator.deviceMemory < 2) && !!AS.three; // one small scene runs fine on 2 GB phones
+    function prefetch() {
+      if (!can() || window.THREE || loading) return;
+      loading = new Promise((res) => {
+        const sc = document.createElement('script');
+        sc.src = AS.three; sc.async = true;
+        sc.onload = () => res(!!window.THREE);
+        sc.onerror = () => { failed = true; res(false); };
+        document.head.appendChild(sc);
+      }).then((ok) => { if (ok && S.screen === 'toss' && S.draft && !S.draft.toss.flipping) render(); return ok; });
+    }
+    const usable = () => can() && !!window.THREE && init();
+    const mk = (w, hh) => { const c = document.createElement('canvas'); c.width = w; c.height = hh || w; return c; };
+    function rrect(g, x, y, w, hh, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + hh, r); g.arcTo(x + w, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+    function envCanvas() {
+      const c = mk(1024, 512), g = c.getContext('2d');
+      const sky = g.createLinearGradient(0, 0, 0, 512);
+      sky.addColorStop(0, '#6a6f7c'); sky.addColorStop(0.48, '#3a3e48'); sky.addColorStop(0.52, '#2a2c33'); sky.addColorStop(1, '#4a3a22');
+      g.fillStyle = sky; g.fillRect(0, 0, 1024, 512);
+      g.filter = 'blur(10px)';
+      // softboxes around the direction the coin face reflects (u≈0.75), so highlights slide across it as it sways
+      [[690, 110, 160, 120, '#ffffff'], [600, 70, 36, 260, '#fff2d8'], [900, 80, 40, 250, '#ffe2ae'], [250, 120, 220, 110, '#ffffff'], [60, 330, 960, 40, '#6b5536']].forEach((b) => { g.fillStyle = b[4]; g.fillRect(b[0], b[1], b[2], b[3]); });
+      g.filter = 'none';
+      return c;
+    }
+    /* Face art: colour, height (raised relief) and roughness (frosted relief on a mirror field), drawn from the same shapes. */
+    function faceMaps(k) {
+      const N = 512, col = mk(N), hei = mk(N), rgh = mk(N);
+      const gc = col.getContext('2d'), gh = hei.getContext('2d'), gr = rgh.getContext('2d');
+      // the cylinder caps map the texture a quarter-turn off (opposite ways front and back), so the art is pre-rotated
+      [gc, gh, gr].forEach((g) => { g.translate(256, 256); g.rotate((k === 'H' ? -1 : 1) * Math.PI / 2); g.translate(-256, -256); });
+      const grd = gc.createRadialGradient(190, 160, 10, 256, 256, 330);
+      grd.addColorStop(0, '#FFE7A1'); grd.addColorStop(0.5, '#F0BE4E'); grd.addColorStop(1, '#C7891F');
+      gc.fillStyle = grd; gc.fillRect(0, 0, N, N);
+      gh.fillStyle = '#7a7a7a'; gh.fillRect(0, 0, N, N);
+      gr.fillStyle = '#4a4a4a'; gr.fillRect(0, 0, N, N);
+      const all = (fn) => [[gc, '#D9A23B'], [gh, '#ffffff'], [gr, '#9a9a9a']].forEach((p) => { p[0].fillStyle = p[1]; p[0].strokeStyle = p[1]; fn(p[0]); });
+      all((g) => { g.lineWidth = 22; g.beginPath(); g.arc(256, 256, 244, 0, Math.PI * 2); g.stroke(); });
+      all((g) => { for (let i = 0; i < 72; i++) { const a = i * Math.PI / 36; g.beginPath(); g.arc(256 + Math.cos(a) * 212, 256 + Math.sin(a) * 212, 4.5, 0, Math.PI * 2); g.fill(); } });
+      const S5 = 5, X = (x) => 256 + (x - 32) * S5, Y = (y) => 232 + (y - 32) * S5;
+      all((g) => {
+        if (k === 'H') {
+          g.save(); g.translate(X(30), Y(32)); g.rotate(-36 * Math.PI / 180); g.translate(-X(30), -Y(32));
+          rrect(g, X(23), Y(21), 14 * S5, 35 * S5, 5 * S5); g.fill(); rrect(g, X(27.5), Y(5), 5 * S5, 18 * S5, 2.5 * S5); g.fill();
+          g.restore();
+          g.beginPath(); g.arc(X(48.5), Y(46.5), 7.5 * S5, 0, Math.PI * 2); g.fill();
+        } else {
+          rrect(g, X(17), Y(12), 14 * S5, 4 * S5, 2 * S5); g.fill(); rrect(g, X(33), Y(12), 14 * S5, 4 * S5, 2 * S5); g.fill();
+          [17.5, 29.25, 41].forEach((sx) => { rrect(g, X(sx), Y(18), 5.5 * S5, 38 * S5, 2.4 * S5); g.fill(); });
+        }
+        g.font = '700 46px "Barlow Condensed", "Noto Sans Kannada", sans-serif'; g.textAlign = 'center';
+        if ('letterSpacing' in g) g.letterSpacing = prefs.lang === 'kn' ? '0px' : '8px';
+        g.fillText(t(k === 'H' ? 'heads' : 'tails').toUpperCase(), 256, 418);
+        g.font = '700 26px "Barlow Condensed", sans-serif';
+        if ('letterSpacing' in g) g.letterSpacing = '0px';
+        const word = 'GULLY CRICKET ★ ';
+        for (let i = 0; i < word.length; i++) { const a = -Math.PI / 2 - 0.62 + i * 0.083; g.save(); g.translate(256 + Math.cos(a) * 180, 256 + Math.sin(a) * 180); g.rotate(a + Math.PI / 2); g.fillText(word[i], 0, 0); g.restore(); }
+      });
+      // seam on the ball (colour only)
+      if (k === 'H') { gc.strokeStyle = '#FBE3A0'; gc.lineWidth = 5; [-1, 1].forEach((d) => { gc.beginPath(); gc.arc(X(48.5) + d * 7.5 * S5 * 1.15, Y(46.5), 7.5 * S5 * 0.85, Math.PI / 2 + (d > 0 ? 0.55 : -0.55 + Math.PI), Math.PI * 1.5 + (d > 0 ? -0.55 : 0.55 + Math.PI), d < 0); gc.stroke(); }); }
+      return { col, hei, rgh };
+    }
+    function init() {
+      if (st) return st.ok;
+      st = { ok: false };
+      try {
+        const T = window.THREE;
+        const canvas = mk(PX * 2);
+        canvas.className = 'coin3d';
+        const r = new T.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
+        r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+        r.setSize(PX, PX, false);
+        r.outputEncoding = T.sRGBEncoding;
+        r.toneMapping = T.ACESFilmicToneMapping;
+        r.toneMappingExposure = 1.25;
+        const scene = new T.Scene();
+        const cam = new T.PerspectiveCamera(30, 1, 0.1, 50);
+        cam.position.set(0, 0, 5.3);
+        const pm = new T.PMREMGenerator(r);
+        const envT = new T.CanvasTexture(envCanvas());
+        envT.mapping = T.EquirectangularReflectionMapping; envT.encoding = T.sRGBEncoding;
+        scene.environment = pm.fromEquirectangular(envT).texture;
+        envT.dispose(); pm.dispose();
+        const faceMat = (k) => {
+          const f = faceMaps(k), map = new T.CanvasTexture(f.col);
+          map.encoding = T.sRGBEncoding; map.anisotropy = 4;
+          return new T.MeshStandardMaterial({ map, bumpMap: new T.CanvasTexture(f.hei), bumpScale: 0.045, roughnessMap: new T.CanvasTexture(f.rgh), roughness: 1, metalness: 1, envMapIntensity: 1.35 });
+        };
+        const rid = mk(64, 8), rg = rid.getContext('2d');
+        for (let i = 0; i < 64; i += 8) { rg.fillStyle = '#fff'; rg.fillRect(i, 0, 4, 8); rg.fillStyle = '#333'; rg.fillRect(i + 4, 0, 4, 8); }
+        const ridT = new T.CanvasTexture(rid); ridT.wrapS = T.RepeatWrapping; ridT.repeat.set(14, 1);
+        const edge = new T.MeshStandardMaterial({ color: 0xd8a03a, metalness: 1, roughness: 0.34, bumpMap: ridT, bumpScale: 0.025, envMapIntensity: 1.2 });
+        const geo = new T.CylinderGeometry(1, 1, 0.13, 128, 1);
+        geo.rotateX(Math.PI / 2);
+        const fH = faceMat('H'), fT = faceMat('T');
+        const mesh = new T.Mesh(geo, [edge, fH, fT]);
+        const pivot = new T.Group(); pivot.add(mesh); scene.add(pivot);
+        scene.add(new T.AmbientLight(0xffffff, 0.2));
+        const key = new T.DirectionalLight(0xfff0d0, 1.6); key.position.set(-2.5, 3, 4); scene.add(key);
+        const fill = new T.DirectionalLight(0xbfc8ff, 0.5); fill.position.set(3, -2, 2); scene.add(fill);
+        Object.assign(st, { ok: true, T, r, scene, cam, pivot, canvas, mats: { H: fH, T: fT }, lang: prefs.lang, rest: 0, anim: null, raf: 0, flipFor: null });
+      } catch (e) { failed = true; st.ok = false; }
+      return st.ok;
+    }
+    function relabel() {
+      if (st.lang === prefs.lang) return;
+      st.lang = prefs.lang;
+      ['H', 'T'].forEach((k) => { const f = faceMaps(k), m = st.mats[k]; m.map.image = f.col; m.map.needsUpdate = true; });
+    }
+    function frame(now) {
+      st.raf = 0;
+      if (!st.canvas.isConnected) return;
+      const a = st.anim;
+      let rx = st.rest, ry = 0, rz = 0;
+      if (a) {
+        const u = Math.min(1, (now - a.t0) / COIN_MS), L = COIN_LAND_MS / COIN_MS;
+        if (u < L) { const v = u / L; rx = a.from + (a.to - a.from) * (1 - Math.pow(1 - v, 2.3)); ry = Math.sin(v * 9) * 0.25 * (1 - v); rz = 0.12 * (1 - v); }
+        else { const v = (u - L) / (1 - L); rx = a.to + 0.22 * Math.sin(v * Math.PI * 2.4) * Math.pow(1 - v, 2); rz = 0.05 * Math.sin(v * Math.PI * 3) * (1 - v); }
+        if (u >= 1) { st.anim = null; st.rest = a.to; rx = a.to; }
+      } else if (!reducedMotion()) {
+        // idle sway at ~30 fps: enough to keep reflections moving, half the battery of a full-rate loop
+        if (now - (st.lastIdle || 0) < 32) { st.raf = requestAnimationFrame(frame); return; }
+        st.lastIdle = now;
+        ry = Math.sin(now / 1500) * 0.34; rz = Math.sin(now / 2300) * 0.06; rx = st.rest + Math.sin(now / 1900) * 0.1;
+      }
+      st.pivot.rotation.set(rx, ry, rz);
+      st.r.render(st.scene, st.cam);
+      if (st.anim || !reducedMotion()) st.raf = requestAnimationFrame(frame);
+    }
+    function mountAll() {
+      const slot = document.querySelector('.coin3d-slot');
+      if (!slot || !st || !st.ok || !S.draft) return;
+      const ts = S.draft.toss;
+      relabel();
+      if (st.canvas.parentNode !== slot) slot.appendChild(st.canvas);
+      const target = ts.result === 'T' ? Math.PI : 0;
+      if (ts.flipping && st.flipFor !== ts && !reducedMotion()) {
+        st.flipFor = ts;
+        const from = st.rest % (Math.PI * 2);
+        st.anim = { t0: performance.now(), from, to: Math.ceil((from + 12 * Math.PI - target) / (Math.PI * 2)) * Math.PI * 2 + target };
+      } else if (!ts.flipping && !st.anim) { st.rest = ts.result ? target : 0; if (!ts.result) st.flipFor = null; }
+      if (!st.raf) st.raf = requestAnimationFrame(frame);
+    }
+    return { prefetch, usable, mountAll };
+  })();
   A.toRulesBack = () => go('rules');
   A.caller = (ds) => { const ts = S.draft.toss; if (ts.result) return; ts.caller = ds.v; render(); };
   A.call = (ds) => { const ts = S.draft.toss; if (ts.result) return; ts.call = ds.v; render(); };
   A.realCoin = () => { const ts = S.draft.toss; if (ts.result) return; ts.real = !ts.real; render(); };
-  A.landed = (ds) => { const ts = S.draft.toss; if (!ts.call || !ts.caller) return; ts.result = ds.v; ts.winner = ts.call === ds.v ? ts.caller : E.other(ts.caller); render(); };
+  A.landed = (ds) => { const ts = S.draft.toss; if (!ts.call || !ts.caller) return; ts.result = ds.v; ts.winner = ts.call === ds.v ? ts.caller : E.other(ts.caller); S.reveal = true; render(); };
   A.flip = () => {
     const ts = S.draft.toss;
     if (ts.flipping || ts.result || !ts.call || !ts.caller) return;
@@ -695,12 +1226,15 @@
     ts.result = bit ? 'H' : 'T';
     ts.flipping = true;
     render();
+    const still = reducedMotion();
+    if (!still) setTimeout(() => { if (ts.flipping) haptic(22); }, COIN_LAND_MS);
     setTimeout(() => {
       ts.flipping = false;
       ts.winner = ts.call === ts.result ? ts.caller : E.other(ts.caller);
-      haptic(25);
+      S.reveal = true;
+      if (still) haptic(25);
       if (S.screen === 'toss' && S.draft && S.draft.toss === ts) render();
-    }, reducedMotion() ? 60 : 1650);
+    }, still ? 60 : COIN_MS);
   };
   A.choice = (ds) => { S.draft.toss.choice = ds.v; render(); };
   A.resetToss = () => { S.draft.toss = emptyToss(); render(); };
@@ -708,7 +1242,7 @@
     const d = S.draft, ts = d.toss;
     if (!ts.choice || !ts.winner) return;
     D.counter = Math.max(D.counter || 0, ...D.matches.map((m) => +m.no || 0)) + 1;
-    const cfg = E.normalizeConfig(Object.assign({}, d.config, { jokerBowls: d.joker.bowls }));
+    const cfg = E.normalizeConfig(Object.assign({}, d.config, { jokerBowls: d.joker.bowls, wideRebowl: true, nbRebowl: true }));
     const m = {
       id: uid('m'), no: D.counter, createdAt: Date.now(), updatedAt: Date.now(), status: 'live',
       teams: { A: teamCopy(d.A), B: teamCopy(d.B) },
@@ -745,19 +1279,30 @@
     const label = inn.isSuper ? t('superOverN', { n: inn.superNo }) : t(inn.idx === 0 ? 'inn1' : 'inn2');
     const bw = inn.bowler && inn.bowlers[inn.bowler];
     let x = topbar(matchTitle(m), 'home', iconBtn('menu', ICON.more, t('menu')));
-    x += '<section class="pane board" style="--team:' + safeColor(bat.color) + '"><div class="board-top"><span class="team-tag"><i aria-hidden="true"></i><span>' + esc(bat.name) + '</span></span><span>' + esc(label) + '</span></div>' +
-      '<div class="board-main"><div class="score" aria-label="' + inn.runs + ' / ' + inn.wkts + '"><b>' + inn.runs + '</b><span>/' + inn.wkts + '</span></div>' +
-      '<div class="overs"><b>' + E.formatOvers(inn.balls, bpo) + '</b><span>/ ' + (inn.maxBalls / bpo) + ' ' + h('ov') + '</span></div></div>' +
+    const lastB = justBall(m), roll = S.prevScore && S.prevScore.id === m.id && S.prevScore.inn === inn.idx && !reducedMotion();
+    const runsCls = roll && S.prevScore.runs !== inn.runs ? ' class="roll"' : '', wktCls = roll && S.prevScore.wkts !== inn.wkts ? ' class="roll"' : '', ovCls = roll && S.prevScore.balls !== inn.balls ? ' class="roll"' : '';
+    S.prevScore = { id: m.id, inn: inn.idx, runs: inn.runs, wkts: inn.wkts, balls: inn.balls };
+    x += '<section class="pane board' + (lastB && lastB.w ? ' hit' : '') + '" data-re="' + (lastB && lastB.w ? 'w' + m.events.length : '') + '" style="--team:' + safeColor(bat.color) + '"><div class="board-top"><span class="team-tag"><i aria-hidden="true"></i><span>' + esc(bat.name) + '</span></span><span>' + esc(label) + '</span></div>' +
+      '<div class="board-main"><div class="score" aria-label="' + inn.runs + ' / ' + inn.wkts + '"><b' + runsCls + ' data-re="' + inn.runs + '">' + inn.runs + '</b><span' + wktCls + ' data-re="' + inn.wkts + '">/' + inn.wkts + '</span></div>' +
+      '<div class="overs"><b' + ovCls + ' data-re="' + inn.balls + '">' + E.formatOvers(inn.balls, bpo) + '</b><span>/ ' + (inn.maxBalls / bpo) + ' ' + h('ov') + '</span></div></div>' +
       '<div class="board-foot"><span>' + h('crr') + ' <b>' + E.runRate(inn.runs, inn.balls, bpo).toFixed(2) + '</b></span>' +
       (ch ? '<span class="need">' + h('needShort', { r: ch.need, b: ch.left }) + '</span><span>' + h('rrr') + ' <b>' + ch.rrr.toFixed(2) + '</b></span>' : '') +
       (inn.freeHit ? '<span class="badge hot">' + h('freeHitBadge') + '</span>' : '') + (inn.solo && !inn.soloStart ? '<span class="badge">' + h('lastManBadge') + '</span>' : '') + '</div>' +
       '<div class="crease">' + batterRow(m, inn, inn.striker, true) + (inn.solo ? '' : batterRow(m, inn, inn.nonStriker, false)) + '</div>' +
-      '<div class="crease-foot"><span class="bowler">' + ICON.ball + '<b>' + esc(playerName(m, inn.bowler)) + '</b>' + (bw ? '<span class="fig">' + figText(bw, bpo) + '</span>' : '') + '</span>' +
+      '<div class="crease-foot">' + bowlerChip(m, st, inn, bw, bpo) +
       (inn.solo ? '' : '<span class="part">' + h('partnership') + ' <span class="fig">' + inn.part.runs + ' (' + inn.part.balls + ')</span></span>') +
       (!inn.solo && inn.striker && inn.nonStriker ? '<button class="icon-btn swap-btn" data-act="swap" aria-label="' + h('swap') + '" title="' + h('swap') + '">' + ICON.swap + '</button>' : '') + '</div></section>';
     x += overTracker(m, inn, bpo);
     x += pad(inn, c);
     return [x, ''];
+  }
+  /* Before the first ball of an over the bowler can still be swapped: the name becomes a button. */
+  const canRepickBowler = (st, inn) => !st.pending && inn.started && !inn.done && !!inn.bowler && inn.overBalls === 0;
+  function bowlerChip(m, st, inn, bw, bpo) {
+    // A fresh bowler's 0.0-0-0-0 says nothing, so it is left out to give the name room.
+    const inner = ICON.ball + '<b>' + esc(playerName(m, inn.bowler)) + '</b>' + (bw && (bw.balls || bw.runs || bw.wkts) ? '<span class="fig">' + figText(bw, bpo) + '</span>' : '');
+    if (!canRepickBowler(st, inn)) return '<span class="bowler">' + inner + '</span>';
+    return '<button class="bowler tap" data-act="repickOpen" aria-label="' + h('repickAria', { name: playerName(m, inn.bowler) }) + '">' + inner + '<span class="chg">' + ICON.chg + '</span></button>';
   }
   function batterRow(m, inn, id, strike) {
     if (!id) return '<div class="bat"><span class="strike"></span><b class="bname">—</b></div>';
@@ -777,10 +1322,43 @@
     const runs = cur.reduce((a, b) => a + b.runs, 0);
     const empties = done ? '' : Array.from({ length: Math.max(0, bpo - legal) }, () => '<span class="tb empty" aria-hidden="true"></span>').join('');
     const hint = modHint();
+    // S.fx marks the ball that was just scored, so the 4/6 pop plays once (not on reload, undo or other re-renders).
+    const fx = !!justBall(m);
     return '<section class="pane tracker" aria-label="' + h('thisOver') + '"><div class="tracker-top"><p class="tracker-head' + (hint ? ' hint' : '') + '" aria-live="polite">' +
       esc(hint || (done ? t('overN', { n: no }) : t('thisOver')) + ' · ' + t('runsUnit', { n: runs })) + '</p>' +
-      smallBtn('undo', ICON.undo, t('undo'), m.events.length ? '' : 'disabled') + '</div><div class="balls">' + cur.map(ballChip).join('') + empties + '</div></section>';
+      undoBtn(m) + '</div><div class="balls' + (fx && !done && cur.length === 1 && no > 1 ? ' fresh' : '') + '" data-re="' + no + '">' + cur.map((b, i) => ballChip(b, fx && i === cur.length - 1)).join('') + empties + '</div></section>';
   }
+  /* The ball that was just scored (S.fx is set only for the render that follows a tap), else null. */
+  function justBall(m) {
+    if (!(S.fx && S.fx.id === m.id && S.fx.len === m.events.length && m.events[m.events.length - 1].t === 'ball')) return null;
+    const st = stateOf(m);
+    return st ? lastBall(st) : null;
+  }
+  /* Undo always says what it will take back: a ball, a bowler pick, a new batter, the openers... */
+  function lastBall(st) {
+    for (let i = st.innings.length - 1; i >= 0; i--) {
+      const ov = st.innings[i].overs;
+      for (let j = ov.length - 1; j >= 0; j--) if (ov[j].length) return ov[j][ov[j].length - 1];
+    }
+    return null;
+  }
+  function undoText(m) {
+    const e = m.events[m.events.length - 1];
+    if (!e) return t('undo');
+    const nm = (id) => { const n = playerName(m, id); return n.length > 12 ? n.slice(0, 11) + '…' : n; };
+    let x = '';
+    if (e.t === 'ball') { const st = stateOf(m), b = st && lastBall(st); x = b ? E.ballText(b).t : ''; }
+    else if (e.t === 'bowler' || e.t === 'changeBowler') x = t('uBowler', { name: nm(e.id) });
+    else if (e.t === 'batter') x = t('uBatter', { name: nm(e.id) });
+    else if (e.t === 'start') x = t('uStart');
+    else if (e.t === 'swap') x = t('uSwap');
+    else if (e.t === 'retire') x = t('uRetire');
+    else if (e.t === 'end') x = t('uEnd');
+    else if (e.t === 'tiebreak') x = t('tb_' + e.mode);
+    else if (e.t === 'bowl') x = t(e.hit ? 'hit' : 'miss');
+    return x ? t('undoX', { x }) : t('undo');
+  }
+  const undoBtn = (m) => smallBtn('undo', ICON.undo, undoText(m), (m.events.length ? '' : 'disabled ') + 'title="' + esc(undoText(m)) + '"');
   function pad(inn, c) {
     const M = S.mod;
     const kind = M.wide ? 'wide' : M.nb ? 'noball' : 'legal';
@@ -808,7 +1386,11 @@
       if ((M.bye || M.lb) && n > 0) ev = { t: 'ball', kind, bat: 0, ext: n, extType: M.lb ? 'lb' : 'b' };
       else ev = { t: 'ball', kind, bat: n };
     }
-    if (dispatch(ev)) haptic(n >= 4 ? 24 : 10);
+    const m = liveMatch();
+    S.fx = m && !reducedMotion() ? { id: m.id, len: m.events.length + 1 } : null;
+    const ok = dispatch(ev);
+    S.fx = null;
+    if (ok) haptic(n >= 4 ? 24 : 10);
   };
   A.out = () => {
     const M = S.mod;
@@ -825,7 +1407,7 @@
     const sh = S.sheet;
     if (!sh) return;
     if (ds.v === 'runOut') { S.sheet = { type: 'runout', kind: sh.kind, mods: sh.mods, who: 'striker', runs: 0 }; renderSheet(); return; }
-    if (dispatch({ t: 'ball', kind: sh.kind, bat: 0, ext: 0, wicket: { how: ds.v, out: 'striker' } })) haptic(40);
+    if (fxDispatch({ t: 'ball', kind: sh.kind, bat: 0, ext: 0, wicket: { how: ds.v, out: 'striker' } })) haptic(40);
   };
   SHEETS.runout = () => {
     const m = liveMatch(), st = stateOf(m);
@@ -846,8 +1428,9 @@
     if (sh.kind === 'wide') ev = { t: 'ball', kind: 'wide', ext: n, wicket: w };
     else if ((sh.mods.bye || sh.mods.lb) && n > 0) ev = { t: 'ball', kind: sh.kind, bat: 0, ext: n, extType: sh.mods.lb ? 'lb' : 'b', wicket: w };
     else ev = { t: 'ball', kind: sh.kind, bat: n, wicket: w };
-    if (dispatch(ev)) haptic(40);
+    if (fxDispatch(ev)) haptic(40);
   };
+  function fxDispatch(ev) { const m = liveMatch(); S.fx = m && !reducedMotion() ? { id: m.id, len: m.events.length + 1 } : null; const ok = dispatch(ev); S.fx = null; return ok; }
   function shNextBatter(m, st) {
     const inn = st.innings[st.cur];
     const cands = E.batterCandidates(st, inn);
@@ -857,7 +1440,7 @@
     if (lastBall && lastBall.w && f) { const b = inn.batters[f.id]; sub = playerName(m, b.id) + ' · ' + howText(m, b) + ' · ' + b.runs + ' (' + b.balls + ')'; }
     return sheetWrap(t('nextBatter'), (sub ? '<p class="sheet-sub">' + esc(sub) + '</p>' : '') +
       '<div class="pick-list">' + cands.map((id) => { const b = inn.batters[id]; return '<button class="pick" data-act="batter" data-id="' + esc(id) + '"><span>' + esc(playerName(m, id)) + '</span>' + (b.status === 'retired' ? '<small>' + h('retiredTag') + ' · ' + b.runs + ' (' + b.balls + ')</small>' : '') + '</button>'; }).join('') + '</div>' +
-      '<div class="sheet-actions">' + smallBtn('undo', ICON.undo, t('undoLast')) + smallBtn('endInningsAsk', '', t('endInnings')) + '</div>', true);
+      '<div class="sheet-actions">' + undoBtn(m) + smallBtn('endInningsAsk', '', t('endInnings')) + '</div>', true);
   }
   function shNextBowler(m, st) {
     const inn = st.innings[st.cur], bpo = st.config.ballsPerOver;
@@ -867,7 +1450,7 @@
     return sheetWrap(t('nextBowler'), (inn.overs.length > 1 ? '<p class="sheet-sub">' + h('overDone', { n: inn.overs.length - 1, r: overRuns }) + '</p>' : '') +
       '<div class="pick-list">' + opts.map((o) => { const b = inn.bowlers[o.id]; return '<button class="pick" data-act="bowler" data-id="' + esc(o.id) + '"' + (o.disabled ? ' disabled' : '') + '><span>' + esc(playerName(m, o.id)) + '</span><small>' + (o.disabled ? h('r_' + o.reason) : (b ? figText(b, bpo) : '0-0-0-0')) + '</small></button>'; }).join('') + '</div>' +
       (opts.some((o) => o.relaxed) ? '<p class="meta">' + h('relaxed') + '</p>' : '') +
-      '<div class="sheet-actions">' + smallBtn('undo', ICON.undo, t('undoLast')) + (!inn.solo && inn.striker && inn.nonStriker ? smallBtn('swap', ICON.swap, t('swap')) : '') + smallBtn('endInningsAsk', '', t('endInnings')) + '</div>', true);
+      '<div class="sheet-actions">' + undoBtn(m) + (!inn.solo && inn.striker && inn.nonStriker ? smallBtn('swap', ICON.swap, t('swap')) : '') + smallBtn('endInningsAsk', '', t('endInnings')) + '</div>', true);
   }
   A.batter = (ds) => dispatch({ t: 'batter', id: ds.id });
   A.bowler = (ds) => dispatch({ t: 'bowler', id: ds.id });
@@ -908,16 +1491,50 @@
     return sheetWrap(t('changeBowler'), '<div class="pick-list">' + opts.map((o) => { const b = inn.bowlers[o.id]; return '<button class="pick" data-act="changeBowler" data-id="' + esc(o.id) + '"' + (o.disabled ? ' disabled' : '') + '><span>' + esc(playerName(m, o.id)) + '</span><small>' + (o.disabled ? h('r_' + o.reason) : (b ? figText(b, bpo) : '0-0-0-0')) + '</small></button>'; }).join('') + '</div>');
   };
   A.changeBowler = (ds) => dispatch({ t: 'changeBowler', id: ds.id });
+  /* Re-pick the bowler before the over's first ball. The pick (or the openers' bowler) is replaced, so no trace is left. */
+  A.repickOpen = () => { S.sheet = { type: 'repick' }; renderSheet(); };
+  SHEETS.repick = () => {
+    const m = liveMatch(), st = stateOf(m);
+    if (!st) return '';
+    const inn = st.innings[st.cur], bpo = st.config.ballsPerOver;
+    if (!canRepickBowler(st, inn)) return '';
+    const opts = E.bowlerOptions(st, inn);
+    return sheetWrap(t('repick'), '<p class="sheet-sub">' + h('repickSub') + '</p><div class="pick-list">' + opts.map((o) => {
+      const b = inn.bowlers[o.id], cur = o.id === inn.bowler;
+      return '<button class="pick' + (cur ? ' current' : '') + '" data-act="repick" data-id="' + esc(o.id) + '"' + (o.disabled && !cur ? ' disabled' : '') + ' aria-pressed="' + cur + '"><span>' + esc(playerName(m, o.id)) + '</span><small>' +
+        (cur ? h('bowlingNow') : o.disabled ? h('r_' + o.reason) : (b ? figText(b, bpo) : '0-0-0-0')) + '</small></button>';
+    }).join('') + '</div>');
+  };
+  A.repick = (ds) => {
+    const m = liveMatch(), st = stateOf(m);
+    if (!st) return;
+    const inn = st.innings[st.cur];
+    if (!canRepickBowler(st, inn) || ds.id === inn.bowler) { closeSheet(); return; }
+    const last = m.events[m.events.length - 1];
+    let ev = null;
+    if (last && last.t === 'bowler') ev = { t: 'bowler', id: ds.id };
+    else if (last && last.t === 'start') ev = Object.assign({}, last, { bowler: ds.id });
+    if (!ev) { dispatch({ t: 'changeBowler', id: ds.id }); return; }
+    const r = E.tryAppend(Object.assign({}, m, { events: m.events.slice(0, -1) }), ev);
+    if (!r.ok) { toast(t('errGeneric', { e: r.error })); return; }
+    m.events[m.events.length - 1] = ev;
+    S.sheet = null;
+    Store.touchMatch(m);
+    haptic(10);
+    render();
+  };
   A.rulesView = () => { S.sheet = { type: 'rules' }; renderSheet(); };
   SHEETS.rules = () => {
     const m = S.screen === 'result' || S.screen === 'poster' ? findMatch(S.viewId) : liveMatch();
     if (!m) return '';
     const c = E.normalizeConfig(m.config);
     const yn = (v) => t(v ? 'on' : 'off');
-    const rows = [[t('overs'), c.overs], [t('bpo'), c.ballsPerOver], [t('wideRun'), yn(c.wideRuns > 0)], [t('wideRebowl'), yn(c.wideRebowl)], [t('nbRun'), yn(c.nbRuns > 0)],
-      [t('nbRebowl'), yn(c.nbRebowl)], [t('freeHit'), yn(c.freeHit)], [t('byes'), yn(c.byes)], [t('sixOut'), c.sixOut ? (c.sixOutRuns ? t('sixOutRuns') : t('on')) : t('off')],
+    // Re-bowl rows only appear for older matches that were played without re-bowling.
+    const rows = [[t('overs'), c.overs], [t('bpo'), c.ballsPerOver], [t('wideRun'), yn(c.wideRuns > 0)]].concat(c.wideRebowl ? [] : [[t('wideRebowl'), yn(false)]],
+      [[t('nbRun'), yn(c.nbRuns > 0)]], c.nbRebowl ? [] : [[t('nbRebowl'), yn(false)]],
+      [[t('freeHit'), yn(c.freeHit)], [t('byes'), yn(c.byes)], [t('sixOut'), c.sixOut ? (c.sixOutRuns ? t('sixOutRuns') : t('on')) : t('off')],
       [t('creaseQ'), t(c.singleBatter ? 'crease1' : 'crease2')], [t('lastMan'), c.singleBatter ? '—' : yn(c.lastManStands)], [t('lbw'), yn(c.lbw)], [t('hitWicket'), yn(c.hitWicket)], [t('retireAt'), c.retireAt ? t('runsUnit', { n: c.retireAt }) : t('off')],
-      [t('maxOvers'), c.maxOversPerBowler || t('off')], [t('consecutive'), yn(c.consecutiveOvers)]];
+      [t('maxOvers'), c.maxOversPerBowler || t('off')], [t('consecutive'), yn(c.consecutiveOvers)]]);
     if (m.joker) rows.push([t('joker'), m.joker.name + (c.jokerBowls ? '' : ' · ' + t('bat'))]);
     const house = (c.houseRules || []).filter((k) => HOUSE.indexOf(k) >= 0);
     return sheetWrap(t('viewRules'), '<ul class="rules-list">' + rows.map((r) => '<li><span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></li>').join('') + '</ul>' +
@@ -932,7 +1549,7 @@
     abandon: () => { const m = liveMatch(); if (m) removeMatch(m.id); go('home'); },
     abandonAndNew: () => { const m = liveMatch(); if (m) removeMatch(m.id); S.draft = newDraft(); S.teamErr = []; go('teams'); },
     deleteMatch: () => { if (S.viewId) removeMatch(S.viewId); S.viewId = null; go('home'); },
-    wipe: () => { Store.wipe(); S.draft = null; toast(t('wiped')); go('home'); }
+    wipe: () => { Store.wipe(); S.draft = null; toast(t('wiped')); S.regMode = 'welcome'; go('regulars'); }
   };
   A.confirmYes = () => { const k = S.sheet && S.sheet.yes; S.sheet = null; if (k && CONFIRM[k]) CONFIRM[k](); else renderSheet(); };
   function removeMatch(id) {
@@ -966,7 +1583,7 @@
       (single ? '<p class="meta">' + h('singleHint') + '</p>'
         : batIds.length > 1 ? '<p class="label">' + h('nonStriker') + '</p>' + picks(batIds, 'nonStriker', [O.striker, O.bowler], noneChip) + (O.nonStriker === NONE ? '<p class="meta">' + h('aloneHint') + '</p>' : '') : '') + '</section>';
     x += '<section class="pane"><h2 class="sec">' + h('bowlingSide', { team: bowl.name }) + '</h2><p class="label">' + h('openingBowler') + '</p>' + picks(bowlIds, 'bowler', [O.striker, O.nonStriker]) + '</section>';
-    if (st.innings.length > 1 || m.events.length) x += '<div>' + smallBtn('undo', ICON.undo, t('undoLast'), m.events.length ? '' : 'disabled') + '</div>';
+    if (st.innings.length > 1 || m.events.length) x += '<div>' + undoBtn(m) + '</div>';
     const ready = O.striker && O.bowler && (single || batIds.length < 2 || O.nonStriker);
     return [x, '<button class="pill primary" data-act="startInnings"' + (ready ? '' : ' disabled') + '>' + h('startInnings') + '</button>'];
   }
@@ -987,7 +1604,7 @@
     x += '<section class="pane tie-hero"><p class="eyebrow" style="justify-content:center">' + esc(last.isSuper ? t('superOverN', { n: last.superNo }) : t('result')) + '</p><h2 class="display">' + h('tied') + '</h2>' +
       '<p class="meta">' + esc(scoreText(m, prev, bpo)) + ' · ' + esc(scoreText(m, last, bpo)) + '</p></section>';
     x += '<h2 class="sec" style="margin:4px 4px 0">' + h('pickTiebreak') + '</h2><div class="options">' + opt('super', t('tb_super'), t('tb_superSub')) + opt('share', t('tb_share'), t('tb_shareSub')) +
-      opt('bowlout', t('tb_bowlout'), t('tb_bowloutSub', { n: st.config.bowloutBalls })) + '</div><div>' + smallBtn('undo', ICON.undo, t('undoLast')) + '</div>';
+      opt('bowlout', t('tb_bowlout'), t('tb_bowloutSub', { n: st.config.bowloutBalls })) + '</div><div>' + undoBtn(m) + '</div>';
     return [x, ''];
   }
   A.tiebreak = (ds) => dispatch({ t: 'tiebreak', mode: ds.v });
@@ -1004,7 +1621,7 @@
     x += '<section class="pane"><p class="eyebrow">' + h('tb_bowlout') + (sudden ? ' · ' + h('suddenDeath') : '') + '</p>' + row(bo.first) + row(E.other(bo.first)) + '</section>';
     x += '<section class="pane"><p class="big-line">' + h('bowloutTurn', { team: m.teams[side].name, n: bo[side].length + 1 }) + '</p><div class="duo" style="margin-top:12px">' +
       '<button class="pill pill-xl ok" data-act="bowl" data-v="1">' + ICON.check + '<span>' + h('hit') + '</span></button><button class="pill pill-xl danger" data-act="bowl" data-v="0">' + ICON.x + '<span>' + h('miss') + '</span></button></div>' +
-      '<div style="margin-top:12px">' + smallBtn('undo', ICON.undo, t('undo')) + '</div></section>';
+      '<div style="margin-top:12px">' + undoBtn(m) + '</div></section>';
     return [x, ''];
   }
   A.bowl = (ds) => { if (dispatch({ t: 'bowl', hit: ds.v === '1' })) haptic(15); };
@@ -1018,8 +1635,10 @@
     const winColor = r.winner ? safeColor(T[r.winner].color) : 'var(--ball)';
     const main = st.innings.filter((i) => !i.isSuper && i.started), sup = st.innings.filter((i) => i.isSuper && i.started);
     const top = E.performers(st)[0];
-    let x = topbar(h('result'), 'home', iconBtn('resultMenu', ICON.more, t('menu')));
-    x += '<section class="pane result-hero" style="--team:' + winColor + '"><div class="trophy">' + ICON.trophy + '</div><p class="eyebrow">' + h('matchNo', { n: m.no }) + ' · ' + esc(fmtDate(m.createdAt)) + '</p>' +
+    const fresh = S.resultFrom === 'live', party = S.celebrate === m.id && !reducedMotion();
+    S.celebrate = null;
+    let x = topbar(h('result'), 'resultBack', iconBtn('resultMenu', ICON.more, t('menu')));
+    x += '<section class="pane result-hero' + (party ? ' party' : '') + '" style="--team:' + winColor + '">' + (party ? confetti() : '') + '<div class="trophy">' + ICON.trophy + '</div><p class="eyebrow">' + h('matchNo', { n: m.no }) + ' · ' + esc(fmtDate(m.createdAt)) + '</p>' +
       '<h2 class="display">' + esc(resultText(m, r)) + '</h2>' + (r.type === 'wickets' && r.ballsLeft > 0 ? '<p class="meta">' + h('ballsLeft', { n: r.ballsLeft }) + '</p>' : '') +
       '<div class="score-lines">' + main.map((i) => '<p><span>' + esc(T[i.bat].name) + '</span><b>' + i.runs + '/' + i.wkts + '</b><span class="vs">(' + E.formatOvers(i.balls, bpo) + ')</span></p>').join('') +
       sup.map((i, k) => (k % 2 === 0 ? '<p class="eyebrow so-label">' + h('superLine', { n: i.superNo }) + '</p>' : '') + '<p><span>' + esc(T[i.bat].name) + '</span><b>' + i.runs + '/' + i.wkts + '</b><span class="vs">(' + E.formatOvers(i.balls, bpo) + ')</span></p>').join('') + '</div></section>';
@@ -1027,7 +1646,7 @@
       x += '<section class="pane potm" style="--team:' + teamColorOf(m, top.id) + '"><p class="eyebrow">' + h('potm') + '</p><div class="potm-row"><div><p class="potm-name">' + esc(playerName(m, top.id)) + '</p>' +
         '<p class="meta">' + esc(teamNameOf(m, top.id)) + '</p></div><div class="potm-pts"><b>' + Math.round(top.pts) + '</b><small>' + h('ptsLabel') + '</small></div></div><p class="potm-line">' + esc(potmLine(st, top)) + '</p></section>';
     }
-    x += '<section class="pane rematch"><h2 class="sec">' + h('continueQ') + '</h2><button class="pill pill-lg primary wide" data-act="rematch" data-v="same">' + ICON.coin + '<span>' + h('yesToss') + '</span></button>' +
+    if (fresh) x += '<section class="pane rematch"><h2 class="sec">' + h('continueQ') + '</h2><button class="pill pill-lg primary wide" data-act="rematch" data-v="same">' + ICON.coin + '<span>' + h('yesToss') + '</span></button>' +
       (r.winner ? '<button class="pill pill-lg wide pick-pill" data-act="rematch" data-v="winner"><span>' + h('winnerPick') + '</span><small>' + h('winnerPickSub', { team: T[r.winner].name }) + '</small></button>' : '') +
       '<div class="grid3"><button class="pill" data-act="rematch" data-v="edit">' + h('editTeams') + '</button><button class="pill" data-act="rematch" data-v="rules">' + h('changeRules') + '</button>' +
       '<button class="pill" data-act="rematch" data-v="new">' + h('newTeams') + '</button></div></section>';
@@ -1071,8 +1690,16 @@
     else if (ds.v === 'edit') go('teams');
     else { S.draft.cfgTouched = true; go('rules'); }
   };
+  A.resultBack = () => go(S.resultFrom && S.resultFrom !== 'live' && VIEWS[S.resultFrom] ? S.resultFrom : 'home');
+  /* A short burst of team-coloured paper for a match that just ended (rare moment, so it gets the delight). */
+  function confetti() {
+    const cols = ['var(--team)', 'var(--ball)', '#FFB13B', '#A193FF', '#FFFFFF'];
+    let x = '<div class="confetti" aria-hidden="true">';
+    for (let i = 0; i < 26; i++) x += '<i style="--x:' + randInt(100) + '%;--d:' + (randInt(500) + 900) + 'ms;--w:' + (randInt(160) - 80) + 'px;--r:' + (randInt(720) - 360) + 'deg;--c:' + cols[i % cols.length] + ';animation-delay:' + randInt(250) + 'ms"></i>';
+    return x + '</div>';
+  }
   A.resultMenu = () => { S.sheet = { type: 'resultMenu' }; renderSheet(); };
-  SHEETS.resultMenu = () => sheetWrap(t('menu'), '<div class="menu-list">' + (D.live ? '' : '<button class="menu-item" data-act="reopen">' + h('reopen') + '</button>') +
+  SHEETS.resultMenu = () => sheetWrap(t('menu'), '<div class="menu-list">' + (D.live || S.resultFrom !== 'live' ? '' : '<button class="menu-item" data-act="reopen">' + h('reopen') + '</button>') +
     '<button class="menu-item" data-act="rulesView">' + h('viewRules') + '</button><button class="menu-item" data-act="settings">' + h('settings') + '</button><button class="menu-item danger" data-act="deleteAsk">' + h('deleteMatch') + '</button></div>');
   A.reopen = () => {
     const m = findMatch(S.viewId);
@@ -1083,38 +1710,150 @@
   };
   A.deleteAsk = () => confirmAsk(t('deleteQ'), 'deleteMatch');
 
-  /* ---------- POSTER ---------- */
+  /* ---------- LEADERBOARD (today) ---------- */
+  /* Players are matched by name across the day's finished matches, so someone who switches teams still adds up. */
+  function dayBoard(ts) {
+    const key = dayKey(ts);
+    const ms = D.matches.filter((m) => m.status === 'done' && m.result && dayKey(m.createdAt) === key);
+    const P = new Map();
+    let bpo = 6;
+    const get = (m, id) => {
+      const name = playerName(m, id), k = norm(name);
+      let p = P.get(k);
+      if (!p) { p = { name, runs: 0, balls: 0, fours: 0, sixes: 0, wkts: 0, bRuns: 0, bBalls: 0, matches: new Set() }; P.set(k, p); }
+      p.matches.add(m.id);
+      return p;
+    };
+    ms.forEach((m, i) => {
+      const st = stateOf(m);
+      if (!st) return;
+      if (i === 0) bpo = st.config.ballsPerOver;
+      st.innings.filter((inn) => !inn.isSuper && inn.started).forEach((inn) => {
+        inn.order.forEach((id) => { const b = inn.batters[id], p = get(m, id); p.runs += b.runs; p.balls += b.balls; p.fours += b.fours; p.sixes += b.sixes; });
+        inn.bowlerOrder.forEach((id) => { const w = inn.bowlers[id]; if (!w.balls && !w.runs && !w.wkts) return; const p = get(m, id); p.wkts += w.wkts; p.bRuns += w.runs; p.bBalls += w.balls; });
+      });
+    });
+    const all = Array.from(P.values());
+    const bat = all.filter((p) => p.runs > 0).sort((a, b) => b.runs - a.runs || a.balls - b.balls || a.name.localeCompare(b.name)).slice(0, 5);
+    const bowl = all.filter((p) => p.wkts > 0).sort((a, b) => b.wkts - a.wkts || a.bRuns - b.bRuns || b.bBalls - a.bBalls || a.name.localeCompare(b.name)).slice(0, 5);
+    // Player of the day: most performer-of-the-match awards today; a tie goes to the most performer points.
+    const aw = new Map();
+    let runs = 0, fours = 0, sixes = 0;
+    ms.forEach((m) => {
+      const st = stateOf(m);
+      if (!st) return;
+      st.innings.filter((inn) => !inn.isSuper && inn.started).forEach((inn) => { runs += inn.runs; inn.order.forEach((id) => { fours += inn.batters[id].fours; sixes += inn.batters[id].sixes; }); });
+      const perf = E.performers(st);
+      perf.forEach((p, i) => {
+        const name = playerName(m, p.id), k = norm(name);
+        const a = aw.get(k) || { name, k, n: 0, pts: 0 };
+        a.pts += p.pts; if (i === 0) a.n += 1;
+        aw.set(k, a);
+      });
+    });
+    const potd = Array.from(aw.values()).filter((a) => a.n > 0).sort((a, b) => b.n - a.n || b.pts - a.pts || a.name.localeCompare(b.name))[0] || null;
+    if (potd) potd.stats = P.get(potd.k) || null;
+    const nos = ms.map((m) => +m.no || 0).sort((a, b) => a - b);
+    return { ts, n: ms.length, first: nos[0], last: nos[nos.length - 1], bat, bowl, bpo, potd, runs, fours, sixes, ms };
+  }
+  const batLine = (p) => t('lbBat', { r: p.runs, b: p.balls });
+  const bowlLine = (p) => t(p.wkts === 1 ? 'lbBowl1' : 'lbBowl', { w: p.wkts, r: p.bRuns });
+  const dayLine = (B) => t(B.n === 1 ? 'dayMatch1' : 'dayMatches', { n: B.n, a: B.first, b: B.last });
+  const potdLine = (p) => t(p.n === 1 ? 'potdAward1' : 'potdAwards', { n: p.n, p: Math.round(p.pts) });
+  function potdStats(p, bpo) {
+    const s2 = p.stats, parts = [];
+    if (s2 && (s2.runs || s2.balls)) parts.push(t('potdBat', { r: s2.runs, b: s2.balls }));
+    if (s2 && s2.bBalls) parts.push(t('potdBowl', { w: s2.wkts, r: s2.bRuns, o: E.formatOvers(s2.bBalls, bpo) }));
+    return parts.join(' · ');
+  }
+  /* Home dashboard: today's numbers, the three awards and the last result. */
+  function todayCard(done) {
+    const B = dayBoard(Date.now());
+    if (!B.n) return done.length ? '<section class="pane today"><div class="lb-head"><h2 class="sec">' + h('lastMatch') + '</h2></div><div class="list">' + rowItem(done[0], 0) + '</div><p class="meta">' + h('noMatchesToday') + '</p></section>' : '';
+    const stat = (v, k) => '<div class="stat"><b>' + v + '</b><small>' + h(k) + '</small></div>';
+    const tile = (cls, cap, label, p, line, empty) => '<button class="cap-tile ' + cls + '" data-act="board"><div class="cap-top">' + capImg(cap) + '<span class="eyebrow">' + label + '</span></div>' +
+      (p ? '<b>' + esc(p.name) + '</b><span class="stat-line">' + esc(line) + '</span>' : '<span class="stat-line dim">' + empty + '</span>') + '</button>';
+    return '<section class="pane today"><div class="lb-head"><h2 class="sec">' + h('today') + '</h2><span class="meta">' + esc(fmtDate(B.ts)) + '</span></div>' +
+      '<div class="stats4">' + stat(B.n, 'stMatches') + stat(B.runs, 'stRuns') + stat(B.fours, 'stFours') + stat(B.sixes, 'stSixes') + '</div>' +
+      (B.potd ? '<button class="potd-mini" data-act="board"><span class="potd-badge" aria-hidden="true">' + ICON.trophy + '</span><span class="potd-text"><span class="eyebrow">' + h('potd') + '</span><b>' + esc(B.potd.name) + '</b></span><small>' + esc(potdLine(B.potd)) + '</small></button>' : '') +
+      '<div class="caps">' + tile('orange', 'o', h('orangeCap'), B.bat[0], B.bat[0] && batLine(B.bat[0]), h('lbNoRuns')) +
+      tile('purple', 'p', h('purpleCap'), B.bowl[0], B.bowl[0] && bowlLine(B.bowl[0]), h('lbNoWkts')) + '</div>' +
+      '<p class="label">' + h('lastMatch') + '</p><div class="list">' + rowItem(done[0], 0) + '</div></section>';
+  }
+  VIEWS.board = () => {
+    const B = dayBoard(Date.now());
+    let x = topbar(h('lbToday'), null);
+    x += '<section class="pane lb-hero"><p class="eyebrow">' + esc(fmtDate(B.ts)) + '</p><p class="big-line">' + (B.n ? esc(dayLine(B)) : h('lbNone')) + '</p></section>';
+    if (B.potd) {
+      x += '<section class="pane potm lb-potd"><p class="eyebrow"><span class="potd-badge sm" aria-hidden="true">' + ICON.trophy + '</span>' + h('potd') + '</p><div class="potm-row"><div><p class="potm-name">' + esc(B.potd.name) + '</p>' +
+        '<p class="meta">' + h('potdSub') + '</p></div><div class="potm-pts"><b>' + B.potd.n + '</b><small>' + h(B.potd.n === 1 ? 'award1' : 'awards') + '</small></div></div><p class="potm-line">' + esc(potdLine(B.potd)) + (potdStats(B.potd, B.bpo) ? ' · ' + esc(potdStats(B.potd, B.bpo)) : '') + '</p></section>';
+    }
+    const list = (cls, title, sub, rows, line, empty) => '<section class="pane lb-sec ' + cls + '"><div class="lb-title">' + capImg(cls === 'orange' ? 'o' : 'p') + '<div><h2 class="sec">' + title + '</h2><p class="meta">' + sub + '</p></div></div>' +
+      (rows.length ? '<ol class="lb-list">' + rows.map((p, i) => '<li style="--k:' + i + '"' + (i === 0 ? ' class="lead"' : '') + '><span class="rk">' + (i + 1) + '</span><span class="nm"><b>' + esc(p.name) + '</b><small>' + h(p.matches.size === 1 ? 'lbPlayed1' : 'lbPlayed', { n: p.matches.size }) + '</small></span><span class="val">' + line(p) + '</span></li>').join('') + '</ol>'
+        : '<p class="meta">' + empty + '</p>') + '</section>';
+    x += list('orange', h('orangeCap'), h('mostRuns'), B.bat, (p) => '<b>' + p.runs + '</b><small>(' + p.balls + ')</small>', h('lbNoRuns'));
+    x += list('purple', h('purpleCap'), h('mostWkts'), B.bowl, (p) => '<b>' + p.wkts + '/' + p.bRuns + '</b><small>(' + E.formatOvers(p.bBalls, B.bpo) + ')</small>', h('lbNoWkts'));
+    if (B.bat.length || B.bowl.length) x += '<button class="pill pill-lg primary wide" data-act="dayPoster">' + ICON.trophy + '<span>' + h('makeDayPoster') + '</span></button>';
+    if (B.n) x += NATIVE ? '<button class="pill wide" data-act="shareText">' + ICON.share + '<span>' + h('shareDayText') + '</span></button>' : '<button class="pill wide" data-act="copyText">' + ICON.copy + '<span>' + h('copyDayText') + '</span></button>';
+    return [x, ''];
+  };
+  A.board = () => go('board');
+  function dayShareText(ts) {
+    const B = dayBoard(ts);
+    const lines = ['🏏 ' + t('shareDayHead', { date: fmtDate(ts) })];
+    if (B.bat[0]) lines.push('🟠 ' + t('shareOrange', { name: B.bat[0].name, line: batLine(B.bat[0]) }));
+    if (B.bowl[0]) lines.push('🟣 ' + t('sharePurple', { name: B.bowl[0].name, line: bowlLine(B.bowl[0]) }));
+    if (B.potd) lines.push('⭐ ' + t('sharePotd', { name: B.potd.name, line: potdLine(B.potd) }));
+    if (B.n) lines.push(dayLine(B));
+    return lines.join('\n');
+  }
+
+  /* ---------- POSTER (match result or the day's awards) ---------- */
+  const isDayPoster = () => !!(S.poster && S.poster.kind === 'day');
   VIEWS.poster = () => {
-    const m = findMatch(S.viewId);
-    if (!m || !S.poster) { S.screen = 'result'; return null; }
-    const P = S.poster;
-    let x = topbar(h('poster'), 'backToResult');
-    x += '<div class="poster-frame">' + (P.url ? '<img class="poster-img" src="' + P.url + '" alt="' + esc(resultText(m)) + '">' : '<p class="poster-loading">' + h('making') + '</p>') + '</div>';
+    const P = S.poster, day = isDayPoster();
+    const m = day ? null : findMatch(S.viewId);
+    if (!P || (!day && !m)) { S.screen = day ? 'board' : 'result'; return null; }
+    const alt = day ? t('dayTitle') : resultText(m);
+    let x = topbar(h(day ? 'dayPoster' : 'poster'), 'backToResult');
+    x += '<div class="poster-frame">' + (P.url ? '<img class="poster-img' + (P.shown ? '' : ' appear') + '" src="' + P.url + '" alt="' + esc(alt) + '">' : '<p class="poster-loading">' + h('making') + '</p>') + '</div>';
+    if (P.url) P.shown = true;
     if (NATIVE) {
       x += '<div class="duo"><button class="pill pill-lg primary" data-act="shareImage"' + (P.url ? '' : ' disabled') + '>' + ICON.share + '<span>' + h('share') + '</span></button>' +
         '<button class="pill pill-lg" data-act="saveImage"' + (P.blob ? '' : ' disabled') + '>' + ICON.download + '<span>' + h('saveImage') + '</span></button></div>' +
-        '<button class="pill wide" data-act="shareText">' + ICON.share + '<span>' + h('shareTextBtn') + '</span></button>';
+        '<button class="pill wide" data-act="shareText">' + ICON.share + '<span>' + h(day ? 'shareDayText' : 'shareTextBtn') + '</span></button>';
       return [x, ''];
     }
     x += '<div class="duo"><button class="pill pill-lg primary" data-act="saveImage"' + (P.blob ? '' : ' disabled') + '>' + ICON.download + '<span>' + h('saveImage') + '</span></button>' +
       '<button class="pill pill-lg" data-act="copyImage"' + (P.blob ? '' : ' disabled') + '>' + ICON.copy + '<span>' + h('copyImage') + '</span></button></div>' +
-      '<button class="pill wide" data-act="copyText">' + ICON.copy + '<span>' + h('copyText') + '</span></button><p class="meta center">' + h('longPress') + '</p>';
+      '<button class="pill wide" data-act="copyText">' + ICON.copy + '<span>' + h(day ? 'copyDayText' : 'copyText') + '</span></button><p class="meta center">' + h('longPress') + '</p>';
     return [x, ''];
   };
-  A.backToResult = () => go('result');
-  A.poster = () => {
-    const m = findMatch(S.viewId);
-    if (!m) return;
-    const P = { id: m.id, url: null, blob: null };
+  A.backToResult = () => go(isDayPoster() ? 'board' : 'result');
+  function openPoster(P, make) {
     S.poster = P;
     go('poster');
-    makePoster(m).then((cv) => {
+    make().then((cv) => {
       P.url = cv.toDataURL('image/png');
       cv.toBlob((blob) => { P.blob = blob; if (S.poster === P && S.screen === 'poster') render(); }, 'image/png');
       if (S.poster === P && S.screen === 'poster') render();
     }).catch((e) => { console.error(e); toast(t('errGeneric', { e: (e && e.message) || e })); });
-  };
-  A.saveImage = () => { const m = findMatch(S.viewId); if (S.poster && S.poster.blob && m) saveFile('gully-match-' + m.no + '.png', S.poster.blob, 'image/png'); };
+  }
+  A.poster = () => { const m = findMatch(S.viewId); if (m) openPoster({ kind: 'match', id: m.id, url: null, blob: null }, () => makePoster(m)); };
+  A.dayPoster = () => { const ts = Date.now(); openPoster({ kind: 'day', ts, url: null, blob: null }, () => makeDayPoster(dayBoard(ts))); };
+  function posterFile() {
+    if (isDayPoster()) return 'gully-day-' + dayKey(S.poster.ts) + '.png';
+    const m = findMatch(S.viewId);
+    return m ? 'gully-match-' + m.no + '.png' : null;
+  }
+  /* Text that goes with whatever is on screen: the day's awards (leaderboard / day poster) or the match result. */
+  function currentText() {
+    if (S.screen === 'board') return dayShareText(Date.now());
+    if (S.screen === 'poster' && isDayPoster()) return dayShareText(S.poster.ts);
+    const m = findMatch(S.viewId);
+    return m ? shareText(m) : '';
+  }
+  A.saveImage = () => { const f = posterFile(); if (S.poster && S.poster.blob && f) saveFile(f, S.poster.blob, 'image/png'); };
   A.copyImage = () => {
     const P = S.poster;
     if (!P || !P.blob) return;
@@ -1122,15 +1861,15 @@
       navigator.clipboard.write([new ClipboardItem({ 'image/png': P.blob })]).then(() => toast(t('copied'))).catch(() => toast(t('copyFailed')));
     } catch (e) { toast(t('copyFailed')); }
   };
-  A.copyText = () => { const m = findMatch(S.viewId); if (m) copyString(shareText(m)); };
+  A.copyText = () => { const s = currentText(); if (s) copyString(s); };
   A.shareImage = () => {
-    const P = S.poster, m = findMatch(S.viewId);
-    if (!NATIVE || !P || !P.url || !m) return;
+    const P = S.poster, f = posterFile();
+    if (!NATIVE || !P || !P.url || !f) return;
     let r = 'error';
-    try { r = NATIVE.shareFile(P.url.split(',')[1], 'gully-match-' + m.no + '.png', 'image/png', shareText(m)); } catch (e) { r = 'error'; }
+    try { r = NATIVE.shareFile(P.url.split(',')[1], f, 'image/png', currentText()); } catch (e) { r = 'error'; }
     if (r !== 'ok') toast(t('saveUnavailable'));
   };
-  A.shareText = () => { const m = findMatch(S.viewId); if (!m) return; if (NATIVE) { try { NATIVE.shareText(shareText(m)); } catch (e) { copyString(shareText(m)); } } else copyString(shareText(m)); };
+  A.shareText = () => { const s = currentText(); if (!s) return; if (NATIVE) { try { NATIVE.shareText(s); } catch (e) { copyString(s); } } else copyString(s); };
   function shareText(m) {
     const st = stateOf(m), bpo = st.config.ballsPerOver;
     const lines = ['🏏 ' + t('shareHead', { n: m.no, date: fmtDate(m.createdAt) })];
@@ -1326,6 +2065,119 @@
     return cv;
   }
 
+  /* Day awards poster: orange cap (most runs) and purple cap (most wickets), each with a drawn cap and a medal. */
+  const imgCache = {};
+  function loadImg(src) {
+    if (!src) return Promise.resolve(null);
+    if (!imgCache[src]) imgCache[src] = new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+    return imgCache[src];
+  }
+  /* The cap photo, fitted to width w with its base at y, on a soft floor shadow. */
+  function drawCapImg(g, im, cx, y, w) {
+    if (!im) return;
+    const hgt = w * im.height / im.width;
+    const gr = g.createRadialGradient(cx, y - 6, 0, cx, y - 6, w * 0.55);
+    gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.save(); g.fillStyle = gr; g.translate(cx, y - 6); g.scale(1, 0.16); g.beginPath(); g.arc(0, 0, w * 0.55, 0, Math.PI * 2); g.fill(); g.restore();
+    g.drawImage(im, cx - w / 2, y - hgt, w, hgt);
+  }
+  function drawMedal(g, cx, cy, r, ribbon, ribbonDark) {
+    g.save();
+    const tail = (dir) => {
+      g.fillStyle = dir < 0 ? ribbon : ribbonDark;
+      g.beginPath();
+      g.moveTo(cx + dir * r * 0.15, cy); g.lineTo(cx + dir * r * 0.75, cy);
+      g.lineTo(cx + dir * r * 0.95, cy + r * 1.9); g.lineTo(cx + dir * r * 0.6, cy + r * 1.62); g.lineTo(cx + dir * r * 0.32, cy + r * 1.95);
+      g.closePath(); g.fill();
+    };
+    tail(-1); tail(1);
+    let gr = g.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r);
+    gr.addColorStop(0, '#FFF6CC'); gr.addColorStop(0.35, '#F7D46A'); gr.addColorStop(0.75, '#D49A2A'); gr.addColorStop(1, '#9C6812');
+    g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(120,75,5,.55)'; g.lineWidth = r * 0.08; g.beginPath(); g.arc(cx, cy, r * 0.78, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = '#B07A16';
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.25 : r * 0.55;
+      g[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    g.closePath(); g.fill();
+    gr = g.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+    gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(0.45, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+  async function makeDayPoster(B) {
+    await fontsReady();
+    const W = 1080, H = 1350;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d');
+    const FP = '"Anton", "Noto Sans Kannada", Impact, "Arial Black", sans-serif';
+    const FC = '"Barlow Condensed", "Noto Sans Kannada", "Arial Narrow", sans-serif';
+    const up = (s) => (prefs.lang === 'kn' ? String(s) : String(s).toUpperCase());
+    const ink = '#F3F6FB', ink2 = 'rgba(243,246,251,.74)';
+    const OR = { base: '#FF8A1F', dark: '#C2530A', light: '#FFC27A', text: '#FFAE5C', rib: '#FF8A1F', ribD: '#C2530A' };
+    const PU = { base: '#8B5CF6', dark: '#5B2FC4', light: '#C4ABFF', text: '#B9A2FF', rib: '#8B5CF6', ribD: '#5B2FC4' };
+    g.fillStyle = '#0A0D13'; g.fillRect(0, 0, W, H);
+    glow(g, 150, 420, 760, OR.base, 0.48);
+    glow(g, 960, 960, 760, PU.base, 0.5);
+    glow(g, 540, 1460, 700, '#D4F03C', 0.14);
+    g.save(); g.globalAlpha = 0.05; g.strokeStyle = '#FFFFFF'; g.lineWidth = 2;
+    for (let x = -H; x < W; x += 26) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x + H, H); g.stroke(); }
+    g.restore();
+    g.textBaseline = 'alphabetic';
+    drawBall(g, 100, 104, 30);
+    g.textAlign = 'left'; g.fillStyle = ink; g.font = '700 40px ' + FC; spacing(g, 4);
+    g.fillText(up(t('app')), 146, 118);
+    g.textAlign = 'right'; g.fillStyle = ink2; spacing(g, 2);
+    fitFont(g, up(fmtDate(B.ts)), 420, 30, '600 {s}px ' + FC); g.fillText(up(fmtDate(B.ts)), W - 70, 116);
+    spacing(g, 0);
+    g.textAlign = 'center'; g.fillStyle = ink;
+    fitFont(g, up(t('dayTitle')), 940, 112, '{s}px ' + FP); g.fillText(up(t('dayTitle')), W / 2, 236);
+    g.fillStyle = ink2; spacing(g, 3); fitFont(g, up(dayLine(B)), 900, 32, '600 {s}px ' + FC); g.fillText(up(dayLine(B)), W / 2, 284); spacing(g, 0);
+    const [capO, capP] = await Promise.all([loadImg(AS.capO), loadImg(AS.capP)]);
+    const box = (y0, hgt, C) => {
+      g.save(); g.fillStyle = hexA(C.base, 0.11); g.strokeStyle = hexA(C.base, 0.5); g.lineWidth = 3;
+      g.beginPath(); if (g.roundRect) g.roundRect(60, y0, 960, hgt, 40); else g.rect(60, y0, 960, hgt); g.fill(); g.stroke(); g.restore();
+    };
+    const GD = { base: '#F5B70A', text: '#FFD45C', rib: '#F5B70A', ribD: '#B07A06' };
+    // Player of the day
+    const pd = B.potd, y1 = 318;
+    box(y1, 236, GD);
+    drawMedal(g, 200, y1 + 104, 64, GD.rib, GD.ribD);
+    g.textAlign = 'left'; g.fillStyle = GD.text; spacing(g, 5);
+    fitFont(g, up(t('potd')), 640, 32, '700 {s}px ' + FC); g.fillText(up(t('potd')), 330, y1 + 70); spacing(g, 0);
+    g.fillStyle = ink; const pn = up(pd ? pd.name : '—'); fitFont(g, pn, 640, 84, '{s}px ' + FP); g.fillText(pn, 330, y1 + 152);
+    g.fillStyle = ink2; const pl = pd ? potdLine(pd) : ''; fitFont(g, pl, 640, 32, '600 {s}px ' + FC); g.fillText(pl, 330, y1 + 190);
+    const ps = pd ? potdStats(pd, B.bpo) : ''; if (ps) { g.fillStyle = 'rgba(243,246,251,.6)'; fitFont(g, ps, 640, 26, '600 {s}px ' + FC); g.fillText(ps, 330, y1 + 222); }
+    const panel = (y0, C, im, label, p, main, detail, rest) => {
+      const hgt = 332;
+      box(y0, hgt, C);
+      drawCapImg(g, im, 222, y0 + 252, 290);
+      drawMedal(g, 352, y0 + 70, 34, C.rib, C.ribD);
+      const tx = 440, tw = 540;
+      g.textAlign = 'left'; g.fillStyle = C.text; spacing(g, 5);
+      fitFont(g, up(label), tw, 30, '700 {s}px ' + FC); g.fillText(up(label), tx, y0 + 74); spacing(g, 0);
+      g.fillStyle = ink; const nm = up(p ? p.name : '—');
+      fitFont(g, nm, tw, 80, '{s}px ' + FP); g.fillText(nm, tx, y0 + 152);
+      g.fillStyle = C.text; fitFont(g, up(main), tw, 64, '{s}px ' + FP); g.fillText(up(main), tx, y0 + 222);
+      g.fillStyle = ink2; fitFont(g, detail, tw, 30, '600 {s}px ' + FC); g.fillText(detail, tx, y0 + 262);
+      if (rest) {
+        g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(100, y0 + 280, 880, 2);
+        g.fillStyle = 'rgba(243,246,251,.82)'; fitFont(g, rest, 880, 28, '600 {s}px ' + FC); g.fillText(rest, 100, y0 + 316);
+      }
+    };
+    const runnersUp = (rows, line) => rows.slice(1, 4).map((p, i) => (i + 2) + '. ' + p.name + ' ' + line(p)).join('    ');
+    const b0 = B.bat[0], w0 = B.bowl[0];
+    panel(574, OR, capO, t('orangeCap') + ' · ' + t('mostRuns'), b0, b0 ? t('runsUnit', { n: b0.runs }) : '—',
+      b0 ? t('lbDetailBat', { b: b0.balls, f: b0.fours, s: b0.sixes }) : t('lbNoRuns'), runnersUp(B.bat, (p) => String(p.runs)));
+    panel(926, PU, capP, t('purpleCap') + ' · ' + t('mostWkts'), w0, w0 ? t(w0.wkts === 1 ? 'lbWkt1' : 'lbWkts', { n: w0.wkts }) : '—',
+      w0 ? t('lbDetailBowl', { r: w0.bRuns, o: E.formatOvers(w0.bBalls, B.bpo) }) : t('lbNoWkts'), runnersUp(B.bowl, (p) => p.wkts + '/' + p.bRuns));
+    g.textAlign = 'center'; g.fillStyle = 'rgba(243,246,251,.5)'; g.font = '600 26px ' + FC; spacing(g, 3);
+    g.fillText(up(t('p_footer')), 540, 1314); spacing(g, 0);
+    return cv;
+  }
+
   /* ---------- SETTINGS ---------- */
   A.settings = () => { S.sheet = { type: 'settings' }; renderSheet(); };
   SHEETS.settings = () => {
@@ -1334,6 +2186,7 @@
       '<p class="label">' + h('language') + '</p>' + seg('lang', [['en', 'English'], ['kn', 'ಕನ್ನಡ']], prefs.lang) +
       '<p class="label">' + h('theme') + '</p>' + seg('theme', [['auto', t('th_auto')], ['light', t('th_light')], ['dark', t('th_dark')]], prefs.theme) +
       '<p class="label">' + h('glass') + '</p>' + seg('glass', [['on', t('gl_on')], ['off', t('gl_off')]], prefs.glass) + '<p class="meta">' + h('glassSub') + '</p>' +
+      (S.screen === 'regulars' ? '' : '<p class="label">' + h('regulars') + '</p><button class="pill wide" data-act="regEdit">' + ICON.list + '<span>' + h('regEditBtn', { n: D.regulars.length }) + '</span></button>') +
       '<p class="label">' + h('storage') + '</p><p class="status ' + (Store.mode === 'cloud' ? 'cloud' : '') + '">' + h(st) + '</p>' +
       '<p class="label">' + h('backup') + '</p><div class="duo"><button class="pill" data-act="exportFile">' + ICON.download + '<span>' + h(NATIVE ? 'exportPhone' : 'exportFile') + '</span></button>' +
       '<button class="pill" data-act="exportCopy">' + ICON.copy + '<span>' + h('exportCopy') + '</span></button></div>' +
@@ -1346,7 +2199,7 @@
   A.lang = (ds) => { prefs.lang = ds.v === 'kn' ? 'kn' : 'en'; savePrefs(); applyPrefs(); render(); };
   A.theme = (ds) => { prefs.theme = ['auto', 'light', 'dark'].indexOf(ds.v) >= 0 ? ds.v : 'auto'; savePrefs(); applyPrefs(); render(); };
   A.glass = (ds) => { prefs.glass = ds.v === 'off' ? 'off' : 'on'; savePrefs(); applyPrefs(); render(); };
-  function exportText() { return JSON.stringify({ app: 'gully-cricket', v: 1, exportedAt: new Date().toISOString(), data: { teams: D.teams, matches: D.matches, counter: D.counter, last: D.last, pairCfg: D.pairCfg } }); }
+  function exportText() { return JSON.stringify({ app: 'gully-cricket', v: 1, exportedAt: new Date().toISOString(), data: { teams: D.teams, regulars: D.regulars, matches: D.matches, counter: D.counter, last: D.last, pairCfg: D.pairCfg } }); }
   A.exportFile = () => saveFile('gully-cricket-backup-' + new Date().toISOString().slice(0, 10) + '.json', exportText(), 'application/json');
   A.exportCopy = () => copyString(exportText());
   A.importFile = (ds, el) => {
@@ -1377,6 +2230,8 @@
     D.matches.sort((a, b) => a.createdAt - b.createdAt);
     D.counter = Math.max(D.counter || 0, ...D.matches.map((m) => +m.no || 0));
     if (!D.live) { const lv = D.matches.filter((m) => m.status === 'live'); if (lv.length) D.live = lv[lv.length - 1].id; }
+    D.regulars = unionRegulars(D.regulars, Array.isArray(data.regulars) ? data.regulars : regularsFromTeams(data.teams));
+    D.onboarded = true;
     Store.touchMeta();
     S.sheet = null;
     toast(t('imported', { n: added }));
@@ -1416,7 +2271,7 @@
       if (D.live && D.live !== m.id) { toast(t('otherLive')); return; }
       D.live = m.id; go('match'); return;
     }
-    S.viewId = m.id; S.cardTab = 0; go('result');
+    S.viewId = m.id; S.cardTab = 0; S.resultFrom = TABS.indexOf(S.screen) >= 0 ? S.screen : 'history'; go('result');
   };
 
   /* ---------- events ---------- */
@@ -1435,6 +2290,27 @@
     if (e.key === 'Enter' && el && el.dataset && el.dataset.enter && A[el.dataset.enter]) { e.preventDefault(); A[el.dataset.enter](el.dataset, el); }
     else if (e.key === 'Escape' && S.sheet) closeSheet();
   });
+  let drag = null;
+  document.addEventListener('pointerdown', (e) => {
+    const sh = e.target.closest && e.target.closest('#sheet .sheet');
+    if (!sh || e.button > 0 || !e.target.closest('.grip, .sheet-head') || e.target.closest('button')) return;
+    if (!document.querySelector('#sheet button.scrim')) return; // next batter / bowler can't be swiped away
+    drag = { sh, y0: e.clientY, t0: e.timeStamp, dy: 0, id: e.pointerId };
+    sh.style.transition = 'none';
+    try { sh.setPointerCapture(e.pointerId); } catch (er) { /* old WebView */ }
+  });
+  document.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; drag.dy = Math.max(0, e.clientY - drag.y0); drag.sh.style.transform = drag.dy ? 'translateY(' + drag.dy + 'px)' : ''; });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag;
+    drag = null;
+    const v = d.dy / Math.max(1, e.timeStamp - d.t0);
+    if (d.dy > 90 || (v > 0.5 && d.dy > 24)) { closeSheet(); return; }
+    d.sh.style.transition = 'transform .3s cubic-bezier(0.32, 0.72, 0, 1)';
+    d.sh.style.transform = '';
+  };
+  document.addEventListener('pointerup', endDrag);
+  document.addEventListener('pointercancel', endDrag);
   let wake = null, wakeBusy = false;
   async function syncWakeLock() {
     const want = S.screen === 'match' && document.visibilityState === 'visible';
@@ -1453,13 +2329,15 @@
   function boot() {
     applyPrefs();
     if (liveMatch()) S.screen = 'match';
+    else if (needsWelcome()) { S.screen = 'regulars'; S.regMode = 'welcome'; }
     render({ top: true });
     setTimeout(() => { Store.connect(); capDownloads(); }, 0);
   }
   /* Hardware back button (Android shell): close a sheet, else step back a screen. false = let the app close. */
-  const BACK = { teams: 'home', rules: 'toTeams', toss: 'toRulesBack', match: 'home', result: 'home', poster: 'backToResult', history: 'home' };
+  const BACK = { teams: 'home', rules: 'toTeams', toss: 'toRulesBack', match: 'home', result: 'resultBack', poster: 'backToResult', history: 'home', board: 'home', regulars: 'regBack' };
   function goBack() {
     if (S.sheet) { closeSheet(); return true; }
+    if (S.screen === 'regulars' && S.regMode === 'welcome') return false;
     const a = BACK[S.screen];
     if (!a || !A[a]) return false;
     A[a]();

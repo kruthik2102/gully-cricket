@@ -28,13 +28,14 @@ Needs Android 8.0 or newer. New versions install over the old one and keep your 
 
 ## What it does
 
-- **Teams once, reused forever.** Save squads, add a common player who bats for both sides.
-- **Your gully rules.** Last batter bats alone, single batter, six is out, re-bowl wides, free hit, retire at N runs, bowler over limits, plus house rules like one tip one hand.
-- **Toss.** Flip the in-app coin or enter a real coin, or let the last match's winner pick bat or bowl.
+- **Regular players.** Add the usual names once, then tick them into teams or randomise two even teams. An odd count makes one player common to both sides.
+- **Your gully rules.** Last batter bats alone, single batter, six is out, free hit, retire at N runs, bowler over limits, plus house rules like one tip one hand. Wides and no-balls are always bowled again.
+- **Toss.** Flip a 3D gold coin or enter a real coin, or let the last match's winner pick bat or bowl.
 - **One tap per ball.** Big run keys, wide / no-ball / bye pills, undo anything. The over shows as tennis balls; a wicket is the red tape ball.
 - **Wickets the gully way.** Bowled, caught, stumped or run out, then pick the next batter. No fielder names.
 - **Ties settled.** Super over, share the match, or a bowl-out.
 - **Performer of the match** from batting and bowling impact, plus a full scorecard.
+- **Today's leaderboard.** Player of the day, orange cap (most runs) and purple cap (most wickets), with a day awards poster.
 - **Result poster** in a bold sports style: share it to WhatsApp or save it to your gallery.
 - **Kannada and English**, light and dark themes, a Solid look for bright sun.
 
@@ -63,3 +64,5 @@ Every push to `main` runs the **Build Android APK** workflow. When `version.txt`
 | `android/` | WebView shell: share, save to gallery, back button, keep screen on |
 | `test/` | Engine unit tests and browser tests |
 | `fonts/` | Anton, Barlow Condensed, Noto Sans Kannada (SIL Open Font License 1.1) |
+| `vendor/` | three.js r128 for the 3D coin (MIT) |
+| `assets/` | Cap images for the leaderboard and poster |

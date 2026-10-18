@@ -54,6 +54,11 @@ function mockBridge() {
   });
   check(fonts.every(Boolean), 'embedded fonts load offline (Barlow Condensed, Anton, Noto Sans Kannada): ' + fonts.join(','));
   check((await calls()).some((c) => c[0] === 'setDark'), 'status bar colour synced with the theme');
+  check((await page.textContent('#app')).includes('Who plays usually?'), 'first launch asks for regular players');
+  check((await page.evaluate(() => window.GullyApp.back())) === false, 'back on the first-launch screen lets Android close the app');
+  await page.fill('#regAdd', 'Kiran, Rahul, Manju, Arjun, Pradeep, Vinay, Ravi, Darshan, Naveen, Chethan');
+  await page.press('#regAdd', 'Enter');
+  await act('regDone');
   await shot('home');
 
   console.log('Back button');
@@ -62,7 +67,10 @@ function mockBridge() {
   check((await page.evaluate(() => window.GullyApp.back())) === true && (await page.evaluate(() => window.GullyApp.state().screen)) === 'home', 'back from teams returns home');
 
   console.log('Match');
-  await act('newMatch'); await act('toRules');
+  await act('newMatch');
+  await act('randOpen'); await act('randAll'); await act('randMake');
+  check((await page.locator('.roster').nth(0).locator('li').count()) === 5, 'randomised 5 v 5 from the regulars');
+  await act('toRules');
   await act('setNum', '[data-k="overs"][data-v="2"]'); await act('oversStep', '[data-v="-1"]');
   await act('toToss');
   await act('call', '[data-v="H"]'); await act('caller', '[data-v="A"]'); await act('realCoin'); await act('landed', '[data-v="H"]');

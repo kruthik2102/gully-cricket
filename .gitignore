@@ -10,3 +10,4 @@ android/.idea/
 *.jks
 *.keystore
 .DS_Store
+android/app/src/main/assets/www/three.min.js
