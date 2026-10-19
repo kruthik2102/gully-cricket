@@ -2182,7 +2182,7 @@
     g.textAlign = 'center'; g.fillStyle = ink;
     fitFont(g, up(t('dayTitle')), 940, 112, '{s}px ' + FP); g.fillText(up(t('dayTitle')), W / 2, 236);
     g.fillStyle = ink2; spacing(g, 3); fitFont(g, up(dayLine(B)), 900, 32, '600 {s}px ' + FC); g.fillText(up(dayLine(B)), W / 2, 284); spacing(g, 0);
-    const [capO, capP] = await Promise.all([loadImg(AS.capO), loadImg(AS.capP)]);
+    const [capO, capP, trophy] = await Promise.all([loadImg(AS.capO), loadImg(AS.capP), loadImg(AS.trophy)]);
     const box = (y0, hgt, C) => {
       g.save(); g.fillStyle = hexA(C.base, 0.11); g.strokeStyle = hexA(C.base, 0.5); g.lineWidth = 3;
       g.beginPath(); if (g.roundRect) g.roundRect(60, y0, 960, hgt, 40); else g.rect(60, y0, 960, hgt); g.fill(); g.stroke(); g.restore();
@@ -2191,7 +2191,12 @@
     // Player of the day
     const pd = B.potd, y1 = 318;
     box(y1, 236, GD);
-    drawMedal(g, 200, y1 + 104, 64, GD.rib, GD.ribD);
+    // the MVP trophy stands on the panel's left, lit by a soft gold glow; its star rises just above the panel
+    if (trophy) {
+      g.save(); g.beginPath(); if (g.roundRect) g.roundRect(60, y1, 960, 236, 40); else g.rect(60, y1, 960, 236); g.clip();
+      glow(g, 196, y1 + 132, 175, GD.base, 0.32); g.restore();
+      const th = 250, tw = th * trophy.width / trophy.height; drawCapImg(g, trophy, 196, y1 + 228, tw);
+    } else drawMedal(g, 200, y1 + 104, 64, GD.rib, GD.ribD);
     g.textAlign = 'left'; g.fillStyle = GD.text; spacing(g, 5);
     fitFont(g, up(t('potd')), 640, 32, '700 {s}px ' + FC); g.fillText(up(t('potd')), 330, y1 + 70); spacing(g, 0);
     g.fillStyle = ink; const pn = up(pd ? pd.name : '—'); fitFont(g, pn, 640, 84, '{s}px ' + FP); g.fillText(pn, 330, y1 + 152);
@@ -2201,7 +2206,6 @@
       const hgt = 332;
       box(y0, hgt, C);
       drawCapImg(g, im, 222, y0 + 252, 290);
-      drawMedal(g, 352, y0 + 70, 34, C.rib, C.ribD);
       const tx = 440, tw = 540;
       g.textAlign = 'left'; g.fillStyle = C.text; spacing(g, 5);
       fitFont(g, up(label), tw, 30, '700 {s}px ' + FC); g.fillText(up(label), tx, y0 + 74); spacing(g, 0);

@@ -4,6 +4,16 @@ Every release is listed here, newest first. To update, download the new APK from
 
 ---
 
+## [1.2.2] - 2026-10-19 · A proper trophy for the day poster
+
+### Day poster
+- **Player of the day now gets a real MVP trophy:** a gold cricket cup with crossed bats, a ball and a star, standing on a black base with an "MVP" plate. A soft gold glow sits behind it, and the star rises just above the panel.
+- The small medals next to the orange and purple caps are gone, so each cap stands on its own.
+
+Nothing else changes. Your teams, players and matches stay as they are.
+
+---
+
 ## [1.2.1] - 2026-10-19 · Liquid glass motion
 
 This release is about feel: the app moves like glass and liquid. Layout, colours and icons are unchanged.
@@ -94,6 +104,7 @@ A big update. It also includes everything from the 1.1 preview, which was never 
 - **English and ಕನ್ನಡ**, light and dark themes, and a Solid look for bright sun.
 - Works fully offline, with no internet permission, ads or accounts. Back up or move matches from Settings → Backup.
 
+[1.2.2]: ../../releases/tag/v1.2.2
 [1.2.1]: ../../releases/tag/v1.2.1
 [1.2.0]: ../../releases/tag/v1.2.0
 [1.0.0]: ../../releases/tag/v1.0.0

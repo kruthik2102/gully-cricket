@@ -17,7 +17,7 @@ if (/<\/style/i.test(css)) throw new Error('styles.css contains a closing style 
 
 // Images (cap awards) ship inside the page; three.js is loaded on demand for the 3D coin.
 const b64 = (f) => fs.readFileSync(path.join(root, f)).toString('base64');
-const assetsJs = 'window.GullyAssets=' + JSON.stringify({ capO: 'data:image/webp;base64,' + b64('assets/cap-orange.webp'), capP: 'data:image/webp;base64,' + b64('assets/cap-purple.webp'), three: '__THREE_SRC__' }) + ';';
+const assetsJs = 'window.GullyAssets=' + JSON.stringify({ capO: 'data:image/webp;base64,' + b64('assets/cap-orange.webp'), capP: 'data:image/webp;base64,' + b64('assets/cap-purple.webp'), trophy: 'data:image/webp;base64,' + b64('assets/trophy-mvp.webp'), three: '__THREE_SRC__' }) + ';';
 const THREE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
 const page0 = src('template.html')
   .replace('/*__ASSETS__*/', () => assetsJs)
