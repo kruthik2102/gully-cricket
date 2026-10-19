@@ -445,6 +445,7 @@
     renderTabs();
     renderSheet();
     Coin3D.mountAll();
+    if (!same && S.screen === 'home') countUp(app);
     if (same && !opts.top) window.scrollTo(0, y); else window.scrollTo(0, 0);
     lastScreen = S.screen;
     if (opts.focus) { const el = document.getElementById(opts.focus); if (el) el.focus({ preventScroll: true }); }
@@ -505,6 +506,19 @@
     sc.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-out', fill: 'forwards' });
     setTimeout(() => g.remove(), 240);
   }
+  /* Today's numbers count up once when the dashboard opens (occasional moment; under a second). */
+  function countUp(root) {
+    if (reducedMotion()) return;
+    const els = Array.from(root.querySelectorAll('[data-count]')).filter((el) => +el.dataset.count > 0);
+    if (!els.length) return;
+    const t0 = performance.now(), D = 700;
+    const step = (now) => {
+      const u = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - u, 3);
+      els.forEach((el) => { if (el.isConnected) el.textContent = String(Math.round(+el.dataset.count * e)); });
+      if (u < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
   /* Morph `root`'s children into `html`: keep matching nodes, update attributes and text, replace what differs.
      Kept nodes let CSS transitions run (switches slide, the segmented thumb glides, ticks and colours fade).
      data-re="…" marks an element that must be rebuilt when its value changes, so its keyframe plays again;
@@ -518,8 +532,9 @@
     const a = from.childNodes, b = to.childNodes;
     for (let i = 0; i < b.length; i++) {
       const nb = b[i], na = a[i];
-      if (!na) { from.appendChild(nb.cloneNode(true)); continue; }
-      if (na.nodeType !== nb.nodeType || na.nodeName !== nb.nodeName || (nb.nodeType === 1 && (nb.getAttribute('data-re') !== na.getAttribute('data-re') || nb.id !== na.id))) { from.replaceChild(nb.cloneNode(true), na); continue; }
+      if (!na) { from.appendChild(born(nb.cloneNode(true))); continue; }
+      const keyed = nb.nodeType === 1 && nb.getAttribute('data-re') !== na.getAttribute('data-re');
+      if (keyed || na.nodeType !== nb.nodeType || na.nodeName !== nb.nodeName || (nb.nodeType === 1 && nb.id !== na.id)) { const c = nb.cloneNode(true); from.replaceChild(keyed ? c : born(c), na); continue; }
       if (nb.nodeType !== 1) { if (na.nodeValue !== nb.nodeValue) na.nodeValue = nb.nodeValue; continue; }
       syncAttrs(na, nb);
       if (na.hasAttribute('data-keep')) continue;
@@ -528,6 +543,7 @@
     }
     while (a.length > b.length) from.removeChild(from.lastChild);
   }
+  function born(n) { if (n.nodeType === 1 && !reducedMotion()) n.classList.add('born'); return n; }
   function syncAttrs(x, y) {
     Array.from(x.attributes).forEach((at) => { if (!y.hasAttribute(at.name)) x.removeAttribute(at.name); });
     Array.from(y.attributes).forEach((at) => { if (x.getAttribute(at.name) !== at.value) x.setAttribute(at.name, at.value); });
@@ -549,8 +565,34 @@
     el.hidden = i < 0 || !!S.sheet;
     if (i < 0) return;
     if (wasHidden && !reducedMotion()) { el.classList.add('pop'); setTimeout(() => el.classList.remove('pop'), 400); }
-    el.querySelector('.tab-thumb').style.transform = 'translateX(' + (i * 100) + '%)';
+    const bar = el.firstChild, th = bar.querySelector('.tab-thumb'), from = bar.dataset.i == null ? i : +bar.dataset.i;
+    bar.dataset.i = i;
+    if (from !== i && !wasHidden) liquid(th, 'translateX(' + (from * 100) + '%)', 'translateX(' + (i * 100) + '%)', 340, 'cubic-bezier(0.77, 0, 0.175, 1)');
+    else th.style.transform = 'translateX(' + (i * 100) + '%)';
     el.querySelectorAll('.tab').forEach((b, k) => { if (k === i) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  /* Liquid-glass move: the pill stretches along its path and settles with a small wobble.
+     Starts from wherever it is right now, so a second tap mid-move retargets instead of jumping. */
+  function liquid(el, fromT, toT, ms, ease) {
+    if (!el.animate || reducedMotion()) { el.style.transform = toT; return; }
+    const cur = el.getAnimations().length ? getComputedStyle(el).transform : fromT;
+    el.getAnimations().forEach((an) => an.cancel());
+    el.style.transform = toT;
+    el.animate([{ transform: cur }, { transform: toT + ' scaleX(1.28) scaleY(.88)', offset: 0.42 }, { transform: toT + ' scaleX(.96) scaleY(1.04)', offset: 0.78 }, { transform: toT }], { duration: ms, easing: ease });
+  }
+  function liquidSwitch(sw) {
+    const k = sw.querySelector('.switch i');
+    if (!k || !k.animate || reducedMotion()) return;
+    const on = sw.getAttribute('aria-checked') === 'true', b = on ? 20 : 0;
+    liquid(k, 'translateX(' + (on ? 0 : 20) + 'px)', 'translateX(' + b + 'px)', 300, 'cubic-bezier(0.23, 1, 0.32, 1)');
+    k.style.transform = '';
+    k.animate([{ backgroundColor: 'rgba(255,255,255,.5)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,.95), 0 6px 16px rgba(0,0,0,.35)' }, { backgroundColor: 'rgba(255,255,255,1)', boxShadow: 'inset 0 0 0 0 rgba(255,255,255,0), 0 2px 6px rgba(0,0,0,.3)' }], { duration: 300, easing: 'ease' });
+  }
+  function liquidSeg(seg, from) {
+    const th = seg.querySelector('.seg-thumb'), to = +getComputedStyle(seg).getPropertyValue('--i');
+    if (!th || !th.animate || reducedMotion() || from === to || isNaN(from)) return;
+    th.getAnimations().forEach((an) => an.cancel());
+    th.animate([{ transform: 'none' }, { transform: 'scaleX(1.22) scaleY(.9)', offset: 0.45 }, { transform: 'scaleX(.97) scaleY(1.03)', offset: 0.8 }, { transform: 'none' }], { duration: 300, easing: 'cubic-bezier(0.77, 0, 0.175, 1)' });
   }
   A.tabGo = (ds) => { if (S.screen === ds.v) { window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' }); return; } go(ds.v); };
   function closeSheet() { S.sheet = null; renderSheet(); }
@@ -559,7 +601,12 @@
     if (!root) return;
     root.innerHTML = '<div class="toast" role="status">' + esc(msg) + '</div>';
     clearTimeout(S.toastT);
-    S.toastT = setTimeout(() => { root.innerHTML = ''; }, 2800);
+    S.toastT = setTimeout(() => {
+      const el = root.firstChild;
+      if (!el || reducedMotion()) { root.innerHTML = ''; return; }
+      el.classList.add('out');
+      S.toastT = setTimeout(() => { root.innerHTML = ''; }, 200);
+    }, 2800);
   }
   function confirmAsk(msg, yes, danger) { S.sheet = { type: 'confirm', msg, yes, danger: danger !== false }; renderSheet(); }
 
@@ -1770,7 +1817,7 @@
   function todayCard(done) {
     const B = dayBoard(Date.now());
     if (!B.n) return done.length ? '<section class="pane today"><div class="lb-head"><h2 class="sec">' + h('lastMatch') + '</h2></div><div class="list">' + rowItem(done[0], 0) + '</div><p class="meta">' + h('noMatchesToday') + '</p></section>' : '';
-    const stat = (v, k) => '<div class="stat"><b>' + v + '</b><small>' + h(k) + '</small></div>';
+    const stat = (v, k) => '<div class="stat"><b data-count="' + v + '">' + v + '</b><small>' + h(k) + '</small></div>';
     const tile = (cls, cap, label, p, line, empty) => '<button class="cap-tile ' + cls + '" data-act="board"><div class="cap-top">' + capImg(cap) + '<span class="eyebrow">' + label + '</span></div>' +
       (p ? '<b>' + esc(p.name) + '</b><span class="stat-line">' + esc(line) + '</span>' : '<span class="stat-line dim">' + empty + '</span>') + '</button>';
     return '<section class="pane today"><div class="lb-head"><h2 class="sec">' + h('today') + '</h2><span class="meta">' + esc(fmtDate(B.ts)) + '</span></div>' +
@@ -2275,14 +2322,184 @@
   };
 
   /* ---------- events ---------- */
+  /* Drag the tab pill sideways like a glass lens, or swipe the page left/right, to change tabs. */
+  let swallow = false;
+  document.addEventListener('click', (e) => { if (swallow) { swallow = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  const swallowNext = () => { swallow = true; setTimeout(() => { swallow = false; }, 60); };
+  function activate(el) {
+    const fn = A[el.dataset.act];
+    if (!fn || el.disabled) return;
+    const seg = el.closest('.seg'), segFrom = seg ? +getComputedStyle(seg).getPropertyValue('--i') : NaN;
+    try { fn(el.dataset, el); } catch (err) { console.error(err); toast(t('errGeneric', { e: (err && err.message) || err })); }
+    if (el.isConnected && el.getAttribute('role') === 'switch') liquidSwitch(el);
+    if (seg && seg.isConnected) liquidSeg(seg, segFrom);
+  }
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-act]');
-    if (!el || el.disabled) return;
-    const fn = A[el.dataset.act];
-    if (!fn) return;
+    if (!el || el.disabled || !A[el.dataset.act]) return;
     e.preventDefault();
-    try { fn(el.dataset, el); } catch (err) { console.error(err); toast(t('errGeneric', { e: (err && err.message) || err })); }
+    activate(el);
   });
+  /* Scrub: press any choice row (segments, chips, Heads/Tails, team pills, colours…) and slide.
+     A glass lens follows the finger over the options and the one under it is chosen on release.
+     Switches can be dragged the same way. A plain tap still works as before. */
+  const isOpt = (b) => b && b.tagName === 'BUTTON' && !b.disabled && (b.hasAttribute('aria-pressed') || b.getAttribute('role') === 'radio');
+  let sc = null, lens = null;
+  function lensEl() {
+    if (!lens) { lens = document.createElement('div'); lens.id = 'lens'; lens.setAttribute('aria-hidden', 'true'); document.body.appendChild(lens); }
+    return lens;
+  }
+  function optionAt(x, y) {
+    let best = null, bd = Infinity;
+    sc.opts.forEach((o) => {
+      const r = o.getBoundingClientRect(), dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0, dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0, d = dx * dx + dy * dy * 2;
+      if (d < bd) { bd = d; best = o; }
+    });
+    return best;
+  }
+  function lensFrame() {
+    if (!sc || !sc.moved) return;
+    const L = sc.lens, r = sc.hover.getBoundingClientRect(), k = 0.32;
+    const tx = r.left + (sc.x - (r.left + r.width / 2)) * 0.12, ty = r.top;
+    sc.cx += (tx - sc.cx) * k; sc.cy += (ty - sc.cy) * k; sc.cw += (r.width - sc.cw) * k; sc.ch += (r.height - sc.ch) * k;
+    const st = 1 + Math.min(0.25, Math.abs(sc.v) * 0.15);
+    L.style.width = sc.cw.toFixed(1) + 'px'; L.style.height = sc.ch.toFixed(1) + 'px';
+    L.style.transform = 'translate(' + sc.cx.toFixed(1) + 'px,' + sc.cy.toFixed(1) + 'px) scale(' + st.toFixed(3) + ',' + (1 / Math.sqrt(st)).toFixed(3) + ')';
+    sc.v *= 0.85;
+    sc.raf = requestAnimationFrame(lensFrame);
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (e.button > 0 || reducedMotion()) return;
+    const sw = e.target.closest && e.target.closest('.row-switch');
+    if (sw && !sw.disabled) { sc = { sw, knob: sw.querySelector('.switch i'), x0: e.clientX, y0: e.clientY, id: e.pointerId, moved: false, on: sw.getAttribute('aria-checked') === 'true', pos: 0 }; return; }
+    const b = e.target.closest && e.target.closest('button');
+    if (!isOpt(b) || !b.parentElement) return;
+    const opts = Array.from(b.parentElement.children).filter(isOpt);
+    if (opts.length < 2) return;
+    sc = { start: b, hover: b, opts, x0: e.clientX, y0: e.clientY, x: e.clientX, lx: e.clientX, lt: e.timeStamp, v: 0, id: e.pointerId, moved: false };
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!sc || e.pointerId !== sc.id) return;
+    const dx = e.clientX - sc.x0, dy = e.clientY - sc.y0;
+    if (!sc.moved) {
+      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy)) { if (Math.abs(dy) > 12) sc = null; return; }
+      sc.moved = true;
+      if (sc.sw) { sc.sw.classList.add('dragging'); sc.knob.getAnimations().forEach((an) => an.cancel()); }
+      else {
+        const r = sc.start.getBoundingClientRect();
+        sc.lens = lensEl(); Object.assign(sc, { cx: r.left, cy: r.top, cw: r.width, ch: r.height });
+        sc.lens.classList.add('on');
+        sc.raf = requestAnimationFrame(lensFrame);
+      }
+    }
+    if (sc.sw) {
+      sc.pos = Math.max(0, Math.min(20, (sc.on ? 20 : 0) + dx));
+      sc.knob.style.transform = 'translateX(' + sc.pos + 'px)';
+      return;
+    }
+    const dt = Math.max(1, e.timeStamp - sc.lt);
+    sc.v = (e.clientX - sc.lx) / dt; sc.lx = e.clientX; sc.lt = e.timeStamp; sc.x = e.clientX;
+    const o = optionAt(e.clientX, e.clientY);
+    if (o && o !== sc.hover) { sc.hover = o; haptic(4); }
+  });
+  const endScrub = (e) => {
+    if (!sc || e.pointerId !== sc.id) return;
+    const d = sc;
+    sc = null;
+    if (!d.moved) return;
+    swallowNext();
+    if (d.sw) {
+      d.sw.classList.remove('dragging');
+      d.knob.style.transform = '';
+      if ((d.pos > 10) !== d.on && e.type === 'pointerup') activate(d.sw);
+      return;
+    }
+    cancelAnimationFrame(d.raf);
+    const L = d.lens;
+    if (L.animate) {
+      const r = d.hover.getBoundingClientRect();
+      L.animate([{ transform: L.style.transform, width: L.style.width, height: L.style.height, opacity: 1 }, { transform: 'translate(' + r.left + 'px,' + r.top + 'px)', width: r.width + 'px', height: r.height + 'px', opacity: 0 }], { duration: 220, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
+    }
+    L.classList.remove('on');
+    if (e.type === 'pointerup' && d.hover.getAttribute('aria-pressed') !== 'true' && d.hover.getAttribute('aria-checked') !== 'true' && d.hover.isConnected) activate(d.hover);
+  };
+  document.addEventListener('pointerup', endScrub);
+  document.addEventListener('pointercancel', endScrub);
+  /* Glass glint: a soft light blooms where a finger presses a glass control (Glass look only). */
+  document.addEventListener('pointerdown', (e) => {
+    if (prefs.glass === 'off' || reducedMotion()) return;
+    const b = e.target.closest && e.target.closest('.pill, .key, .mod, .chip, .pick, .menu-item, .row-item, .tab, .cap-tile, .potd-mini, .icon-btn, .seg button');
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    b.style.setProperty('--gx', (e.clientX - r.left).toFixed(0) + 'px');
+    b.style.setProperty('--gy', (e.clientY - r.top).toFixed(0) + 'px');
+    b.classList.add('glint');
+    const off = () => { b.classList.remove('glint'); window.removeEventListener('pointerup', off); window.removeEventListener('pointercancel', off); };
+    window.addEventListener('pointerup', off);
+    window.addEventListener('pointercancel', off);
+  }, true);
+  /* Glare that slides across glass panes as the page scrolls, like light on moving glass. */
+  let glareRaf = 0;
+  const glare = () => {
+    glareRaf = 0;
+    const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    document.documentElement.style.setProperty('--sp', (window.scrollY / max).toFixed(3));
+  };
+  window.addEventListener('scroll', () => { if (!glareRaf && prefs.glass !== 'off') glareRaf = requestAnimationFrame(glare); }, { passive: true });
+  let td = null, ps = null;
+  document.addEventListener('pointerdown', (e) => {
+    const bar = e.target.closest && e.target.closest('#tabs .tabbar');
+    if (bar && e.button === 0) {
+      const r = bar.getBoundingClientRect();
+      td = { bar, th: bar.querySelector('.tab-thumb'), w: (r.width - 12) / 3, x0: e.clientX, id: e.pointerId, moved: false, start: TABS.indexOf(S.screen), lx: e.clientX, lt: e.timeStamp, v: 0, pos: 0 };
+      return;
+    }
+    if (TABS.indexOf(S.screen) >= 0 && !S.sheet && e.pointerType !== 'mouse' && e.target.closest && e.target.closest('#app')) ps = { x0: e.clientX, y0: e.clientY, t0: e.timeStamp, id: e.pointerId };
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!td || e.pointerId !== td.id || td.start < 0) return;
+    const dx = e.clientX - td.x0;
+    if (!td.moved) {
+      if (Math.abs(dx) < 8) return;
+      td.moved = true;
+      td.bar.classList.add('dragging');
+      try { td.bar.setPointerCapture(td.id); } catch (er) { /* old WebView */ }
+      td.th.getAnimations().forEach((an) => an.cancel());
+    }
+    const dt = Math.max(1, e.timeStamp - td.lt);
+    td.v = (e.clientX - td.lx) / dt; td.lx = e.clientX; td.lt = e.timeStamp;
+    td.pos = Math.max(0, Math.min(2 * td.w, td.start * td.w + dx));
+    const st = reducedMotion() ? 1 : 1 + Math.min(0.3, Math.abs(td.v) * 0.18);
+    td.th.style.transform = 'translateX(' + td.pos + 'px) scaleX(' + st.toFixed(3) + ') scaleY(' + (1 / Math.sqrt(st)).toFixed(3) + ')';
+  });
+  const endTab = (e) => {
+    if (!td || e.pointerId !== td.id) return;
+    const d = td;
+    td = null;
+    if (!d.moved) return;
+    swallowNext();
+    d.bar.classList.remove('dragging');
+    const idx = Math.max(0, Math.min(2, Math.round((d.pos + d.v * 90) / d.w)));
+    const cur = d.th.style.transform, toT = 'translateX(' + (idx * 100) + '%)';
+    d.th.style.transform = toT;
+    if (d.th.animate && !reducedMotion()) d.th.animate([{ transform: cur }, { transform: toT + ' scaleX(1.05) scaleY(.97)', offset: 0.7 }, { transform: toT }], { duration: 300, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' });
+    d.bar.dataset.i = idx;
+    if (TABS[idx] !== S.screen) { haptic(8); go(TABS[idx]); }
+  };
+  document.addEventListener('pointerup', endTab);
+  document.addEventListener('pointercancel', endTab);
+  document.addEventListener('pointerup', (e) => {
+    if (!ps || e.pointerId !== ps.id) return;
+    const dx = e.clientX - ps.x0, dy = e.clientY - ps.y0, dt = e.timeStamp - ps.t0;
+    ps = null;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < 1.8 * Math.abs(dy) || dt > 700 || S.sheet) return;
+    const idx = TABS.indexOf(S.screen) + (dx < 0 ? 1 : -1);
+    if (idx < 0 || idx >= TABS.length) return;
+    swallowNext();
+    haptic(8);
+    go(TABS[idx]);
+  });
+  document.addEventListener('pointercancel', () => { ps = null; });
   document.addEventListener('input', (e) => { const el = e.target, k = el && el.dataset && el.dataset.in; if (k && INPUT[k]) INPUT[k](el); });
   document.addEventListener('change', (e) => { const el = e.target, k = el && el.dataset && el.dataset.change; if (k && A[k]) A[k](el.dataset, el); });
   document.addEventListener('keydown', (e) => {

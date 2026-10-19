@@ -129,6 +129,36 @@ jobs:
             echo "No release published (signing: $SIGNING, version v$V). The APK is in this run's artifacts."
           fi
 
+      # Release notes: this version's section of CHANGELOG.md, then install steps.
+      - name: Write the release notes
+        if: steps.rel.outputs.publish == 'true'
+        env:
+          V: ${{ steps.ver.outputs.name }}
+        run: |
+          awk -v v="$V" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^---$/ { next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "Bug fixes and improvements." > notes.md; fi
+          cat >> notes.md <<EOF2
+
+          ## Install on Android
+          1. Download **GullyCricket-$V.apk** from *Assets* below.
+          2. Open the file. If Android asks, allow **Install unknown apps** for your browser or Files app.
+          3. If Play Protect warns about an unknown developer, tap **More details → Install anyway**.
+
+          Updating? Open the new APK over the old app. Your teams, players and matches stay.
+
+          ## ಆಂಡ್ರಾಯ್ಡ್‌ನಲ್ಲಿ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುವುದು
+          1. ಕೆಳಗಿನ *Assets* ನಲ್ಲಿ **GullyCricket-$V.apk** ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ.
+          2. ಫೈಲ್ ತೆರೆಯಿರಿ. ಕೇಳಿದರೆ **Install unknown apps** ಅನುಮತಿ ನೀಡಿ.
+          3. Play Protect ಎಚ್ಚರಿಕೆ ಬಂದರೆ **More details → Install anyway** ಒತ್ತಿ.
+
+          Full history: [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/main/CHANGELOG.md)
+          EOF2
+
       - name: Publish the GitHub release
         if: steps.rel.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
@@ -138,15 +168,4 @@ jobs:
           name: Gully Cricket ${{ steps.ver.outputs.name }}
           files: GullyCricket-*.apk
           prerelease: ${{ env.SIGNING != 'release' }}
-          body: |
-            ## Install on Android
-            1. Download **GullyCricket-${{ steps.ver.outputs.name }}.apk** from *Assets* below.
-            2. Open the file. If Android asks, allow **Install unknown apps** for your browser or Files app.
-            3. If Play Protect warns about an unknown developer, tap **More details → Install anyway**.
-
-            Works offline. Teams and matches stay on your phone; move them with **Settings → Backup**.
-
-            ## ಆಂಡ್ರಾಯ್ಡ್‌ನಲ್ಲಿ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುವುದು
-            1. ಕೆಳಗಿನ *Assets* ನಲ್ಲಿ **GullyCricket-${{ steps.ver.outputs.name }}.apk** ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ.
-            2. ಫೈಲ್ ತೆರೆಯಿರಿ. ಕೇಳಿದರೆ **Install unknown apps** ಅನುಮತಿ ನೀಡಿ.
-            3. Play Protect ಎಚ್ಚರಿಕೆ ಬಂದರೆ **More details → Install anyway** ಒತ್ತಿ.
+          body_path: notes.md

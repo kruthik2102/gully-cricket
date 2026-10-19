@@ -173,6 +173,9 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action
 @keyframes inLeft { from { opacity: 0; transform: translateX(-32px); } to { opacity: 1; transform: none; } }
 @keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes settle { from { transform: scale(.95); } to { transform: none; } }
+/* elements that appear on the same screen (toss steps, new players, toggled fields) rise in */
+.born { animation: bornIn .26s var(--ease-out) both; }
+@keyframes bornIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 #app.enter .list > * { animation: rowIn .3s var(--ease-out) both; animation-delay: calc(.08s + var(--k, 0) * 40ms); }
 
@@ -268,8 +271,11 @@ html[lang="kn"] .eyebrow { letter-spacing: .02em; }
 .rs-label { display: block; font-weight: 650; }
 .rs-sub { display: block; color: var(--ink-3); font-size: 13px; }
 .switch { position: relative; flex: none; width: 52px; height: 32px; border-radius: 999px; background: var(--pane-2); box-shadow: inset 0 0 0 1px var(--line); transition: background-color .25s ease, box-shadow .25s ease; }
-.switch i { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 999px; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); transition: transform .28s var(--ease-out), width .18s var(--ease-out); }
-.row-switch:active .switch i { width: 32px; }
+.switch i { position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 999px; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); transition: transform .28s var(--ease-out), width .18s var(--ease-out), background-color .2s ease, box-shadow .2s ease; }
+.switch i::after { content: ""; position: absolute; left: 18%; right: 18%; top: 2px; height: 40%; border-radius: 999px; background: linear-gradient(rgba(255, 255, 255, .95), rgba(255, 255, 255, 0)); opacity: 0; transition: opacity .2s ease; }
+/* pressed: the knob becomes a glass lens over the track */
+.row-switch:active .switch i { width: 32px; background: rgba(255, 255, 255, .5); -webkit-backdrop-filter: blur(3px) saturate(190%); backdrop-filter: blur(3px) saturate(190%); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .95), 0 6px 16px rgba(0, 0, 0, .35); }
+.row-switch:active .switch i::after { opacity: 1; }
 .row-switch[aria-checked="true"]:active .switch i { transform: translateX(14px); }
 .row-switch[aria-checked="true"] .switch { background: var(--ball); box-shadow: none; }
 .row-switch[aria-checked="true"] .switch i { transform: translateX(20px); }
@@ -608,7 +614,7 @@ table.sc { width: 100%; border-collapse: collapse; font-variant-numeric: tabular
   box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top);
   animation: sheetUp .38s var(--ease-drawer);
 }
-@keyframes sheetIn { from { transform: translateY(30px); } to { transform: none; } }
+@keyframes sheetIn { from { opacity: 0; transform: translateY(-8px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
 #sheet .scrim { animation: fadeIn .25s ease-out; }
 #sheet.still .scrim, #sheet.still .sheet { animation: none; }
@@ -635,7 +641,9 @@ html[lang="kn"] .sheet-head h2 { text-transform: none; letter-spacing: 0; font-s
 .status.cloud::before { background: var(--ok); }
 .file-pill { cursor: pointer; }
 #toast { position: fixed; left: 0; right: 0; top: calc(12px + env(safe-area-inset-top, 0px)); z-index: 40; display: flex; justify-content: center; padding: 0 16px; pointer-events: none; }
+.toast.out { opacity: 0; transform: translateY(-8px); }
 .toast {
+  transition: opacity .18s ease, transform .18s var(--ease-out);
   max-width: 440px; padding: 12px 20px; border-radius: 999px; font-weight: 650; text-align: center;
   background: var(--s-sheet); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   box-shadow: var(--shadow), inset 0 0 0 1px var(--rim); animation: sheetIn .22s ease-out;
@@ -762,7 +770,18 @@ html[lang="kn"] .badge, html[lang="kn"] .coin .face small, html[lang="kn"] .key 
   background: var(--s-sheet); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   box-shadow: var(--shadow), inset 0 1px 0 var(--rim-top), inset 0 0 0 1px var(--rim);
 }
-.tab-thumb { position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px) / 3); border-radius: 999px; background: var(--ball); box-shadow: 0 6px 18px var(--on-ball-glow); transition: transform .3s var(--ease-in-out); }
+.tabbar { touch-action: none; }
+.tab-thumb {
+  position: absolute; top: 6px; bottom: 6px; left: 6px; width: calc((100% - 12px) / 3); border-radius: 999px; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ball) 80%, #fff) 0%, var(--ball) 48%, color-mix(in srgb, var(--ball) 88%, #000) 100%);
+  box-shadow: 0 6px 18px var(--on-ball-glow), inset 0 1px 0 rgba(255, 255, 255, .75), inset 0 -2px 6px rgba(0, 0, 0, .14);
+  transition: background-color .25s ease, box-shadow .25s ease;
+}
+.tab-thumb::before { content: ""; position: absolute; left: 12%; right: 12%; top: 2px; height: 42%; border-radius: 999px; background: linear-gradient(rgba(255, 255, 255, .6), rgba(255, 255, 255, 0)); }
+/* while dragged the pill turns into a clear glass lens */
+.tabbar.dragging .tab-thumb { background: color-mix(in srgb, var(--ball) 30%, transparent); -webkit-backdrop-filter: blur(6px) saturate(190%); backdrop-filter: blur(6px) saturate(190%); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .6), inset 0 8px 14px rgba(255, 255, 255, .18), 0 10px 26px rgba(0, 0, 0, .35); }
+.tabbar.dragging .tab { color: var(--ink); }
+#app.has-tabs { touch-action: pan-y; }
 .tab { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 54px; border: 0; border-radius: 999px; background: none; color: var(--ink-2); font: 700 12px/1.15 var(--f-body); }
 .tab svg { width: 22px; height: 22px; }
 .tab[aria-current="page"] { color: var(--ball-ink); }
@@ -821,3 +840,40 @@ html[lang="kn"] .potd-text b { text-transform: none; font-size: 19px; line-heigh
 @media (prefers-reduced-motion: reduce) {
   #app.enter > *, .sheet, .poster-img.appear { animation: fadeIn .2s ease both !important; }
 }
+
+/* ---------- 1.2.1: liquid glass ---------- */
+/* scrub lens: a clear glass drop that follows the finger across a row of choices */
+#lens {
+  position: fixed; left: 0; top: 0; z-index: 35; pointer-events: none; border-radius: 999px; opacity: 0;
+  background: color-mix(in srgb, var(--ball) 14%, transparent);
+  -webkit-backdrop-filter: blur(.6px) saturate(210%) brightness(1.12); backdrop-filter: blur(.6px) saturate(210%) brightness(1.12);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .6), inset 0 8px 14px rgba(255, 255, 255, .16), 0 10px 26px rgba(0, 0, 0, .3);
+  transition: opacity .15s ease; will-change: transform;
+}
+#lens.on { opacity: 1; }
+#lens::before { content: ""; position: absolute; left: 14%; right: 14%; top: 2px; height: 40%; border-radius: 999px; background: linear-gradient(rgba(255, 255, 255, .55), rgba(255, 255, 255, 0)); }
+.seg, .chip-row, .duo, .swatches, .grid2, .grid4, .row-switch { touch-action: pan-y; }
+.row-switch.dragging .switch i { width: 32px; transition: width .18s var(--ease-out), background-color .2s ease, box-shadow .2s ease; background: rgba(255, 255, 255, .5); -webkit-backdrop-filter: blur(3px) saturate(190%); backdrop-filter: blur(3px) saturate(190%); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .95), 0 6px 16px rgba(0, 0, 0, .35); }
+.row-switch.dragging .switch i::after { opacity: 1; }
+
+/* glint: light blooms under the finger on glass controls */
+html[data-glass="on"] :is(.pill, .key, .mod, .chip, .pick, .menu-item, .row-item, .cap-tile, .potd-mini, .icon-btn) { position: relative; }
+html[data-glass="on"] :is(.pill, .key, .mod, .chip, .pick, .menu-item, .row-item, .tab, .cap-tile, .potd-mini, .icon-btn, .seg button)::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, .38), rgba(255, 255, 255, .08) 38%, rgba(255, 255, 255, 0) 65%);
+  transition: opacity .4s ease;
+}
+html[data-glass="on"] .glint::after { opacity: 1; transition-duration: .08s; }
+
+/* glare: a faint band of light on glass panes, the dock and sheets, sliding as the page scrolls */
+html[data-glass="on"] :is(.pane, .row-item, .tabbar, .dock)::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(112deg, rgba(255, 255, 255, 0) 30%, rgba(255, 255, 255, .07) 42%, rgba(255, 255, 255, .12) 47%, rgba(255, 255, 255, 0) 60%);
+  background-size: 260% 100%; background-position: calc(100% - var(--sp, 0) * 100%) 0; background-repeat: no-repeat;
+}
+html[data-glass="on"] :is(.row-item, .dock) { position: relative; }
+html[data-glass="on"] .sheet::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 120px; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .08), rgba(255, 255, 255, 0));
+}
+@media (prefers-reduced-motion: reduce) { #lens { transition: none; } }

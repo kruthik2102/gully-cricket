@@ -16,7 +16,7 @@ Score street cricket ball by ball, with your own gully rules. An offline Android
 2. Open the downloaded file. If Android asks, allow **Install unknown apps** for your browser or Files app.
 3. If Play Protect says the developer is unknown, tap **More details → Install anyway**.
 
-Needs Android 8.0 or newer. New versions install over the old one and keep your matches.
+Needs Android 8.0 or newer. New versions install over the old one and keep your matches. See [what's new in each version](CHANGELOG.md).
 
 ### ಕನ್ನಡದಲ್ಲಿ
 
